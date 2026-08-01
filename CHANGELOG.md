@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.0](https://github.com/getmilpa/agent/compare/v0.1.0...v0.2.0) (2026-08-01)
+
+
+### Features
+
+* la sesion registra linaje, origen y que paso con lo que quedo abierto ([0e581cc](https://github.com/getmilpa/agent/commit/0e581cca770b95442b1376c50ec453cafa1a2d6f))
+
 ## 0.1.0 (2026-08-01)
 
 
