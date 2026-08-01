@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.2](https://github.com/getmilpa/agent/compare/v0.2.1...v0.2.2) (2026-08-01)
+
+
+### Bug Fixes
+
+* the capability contract speaks English ([02acad5](https://github.com/getmilpa/agent/commit/02acad55723aa63a7343cc09e74be3aacce39134))
+
 ## [0.2.1](https://github.com/getmilpa/agent/compare/v0.2.0...v0.2.1) (2026-08-01)
 
 
