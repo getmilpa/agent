@@ -40,5 +40,25 @@
       "Milpa\\Agent\\Tests\\": "tests/",
       "Milpa\\Docs\\": "vendor/milpa/core/tools/gen-docs/"
     }
+  },
+  "extra": {
+    "milpa": {
+      "capability": {
+        "id": "agent",
+        "title": "Sesiones que sobreviven al proceso: plan, pendientes, permisos y decisiones",
+        "unlocks": [
+          "agent:sessions",
+          "agent:show",
+          "agent:timeline",
+          "agent:answer",
+          "agent:mode",
+          "coa chat"
+        ],
+        "provides": [
+          "agent.sessions"
+        ],
+        "briefing": "Esta app guarda sesiones de agente: puedes pausarte, pedir permiso y que alguien conteste despu\u00e9s."
+      }
+    }
   }
 }
