@@ -45,7 +45,7 @@
     "milpa": {
       "capability": {
         "id": "agent",
-        "title": "Sesiones que sobreviven al proceso: plan, pendientes, permisos y decisiones",
+        "title": "Sessions that outlive the process: plan, todos, permissions and decisions",
         "unlocks": [
           "agent:sessions",
           "agent:show",
@@ -57,7 +57,7 @@
         "provides": [
           "agent.sessions"
         ],
-        "briefing": "Esta app guarda sesiones de agente: puedes pausarte, pedir permiso y que alguien conteste despu\u00e9s."
+        "briefing": "This app stores agent sessions: you can pause, ask for permission, and have someone answer later."
       }
     }
   }
