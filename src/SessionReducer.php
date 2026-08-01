@@ -46,6 +46,9 @@ final readonly class SessionReducer
         /** @var list<array{role: string, content: string, seq: int}> $turnos */
         $turnos = [];
         $plan = null;
+        $planVersion = 0;
+        $herramientas = 0;
+        $mutaciones = 0;
         $parentId = null;
         /** @var array<string, Todo> $todos */
         $todos = [];
@@ -87,18 +90,37 @@ final readonly class SessionReducer
                 // Una llamada a herramienta es parte de la conversación que el modelo tiene que ver:
                 // sin ella, retomar una sesión sería retomarla sin saber qué ya se intentó, y el
                 // agente repetiría el trabajo que su yo anterior ya hizo.
-                SessionEvent::ToolCalled => $turnos[] = [
+                SessionEvent::ToolCalled => [
+                    // CUÁNTAS HERRAMIENTAS CORRIERON YA. Es lo que permite que el sistema sepa, sin
+                    // preguntarle al agente, si una tarjeta nació antes o después del trabajo.
+                    ++$herramientas,
+                    ($p['mutating'] ?? false) === true ? ++$mutaciones : null,
+                    $turnos[] = [
                     'role' => 'tool',
                     'content' => (\is_string($p['tool'] ?? null) ? $p['tool'] : '?')
                         . ' → ' . (\is_string($p['result'] ?? null) ? $p['result'] : ''),
-                    'seq' => $evento->seq,
+                        'seq' => $evento->seq,
+                    ],
                 ],
                 SessionEvent::Compacted => [
                     $resumen = \is_string($p['summary'] ?? null) ? $p['summary'] : $resumen,
                     $compactadoHasta = \is_int($p['through'] ?? null) ? $p['through'] : $compactadoHasta,
                 ],
-                SessionEvent::PlanSet => $plan = \is_string($p['plan'] ?? null) ? $p['plan'] : $plan,
-                SessionEvent::TodoChanged => $todos[\is_string($p['id'] ?? null) ? $p['id'] : ''] = Todo::fromArray($p),
+                SessionEvent::PlanSet => [
+                    $plan = \is_string($p['plan'] ?? null) ? $p['plan'] : $plan,
+                    // Sin `version` en el payload —eventos anteriores a que esto existiera— el linaje
+                    // se cuenta desde uno. Reproducir una sesión vieja no le inventa versiones que
+                    // nadie escribió; le da la mínima consistente con lo que sí quedó.
+                    $planVersion = \is_int($p['version'] ?? null) ? $p['version'] : max(1, $planVersion),
+                ],
+                // EL ORIGEN SOBREVIVE AL MOVIMIENTO. El evento sólo lo lleva al NACER —un movimiento
+                // no tiene origen, tiene un `from`— así que reconstruir la tarjeta desde el evento
+                // nuevo la dejaría sin él. Conservarlo es trabajo del fold, no del hecho: el stream
+                // dice qué pasó y el fold dice cómo quedó.
+                SessionEvent::TodoChanged => $todos[\is_string($p['id'] ?? null) ? $p['id'] : ''] = $this->conOrigen(
+                    Todo::fromArray($p),
+                    $todos[\is_string($p['id'] ?? null) ? $p['id'] : ''] ?? null,
+                ),
                 SessionEvent::QuestionAsked => $pregunta = PendingQuestion::fromArray($p),
                 // Contestar cierra la pregunta ABIERTA, y la respuesta entra como turno: es contexto
                 // que el modelo necesita en el siguiente paso, no metadato.
@@ -114,6 +136,8 @@ final readonly class SessionReducer
                         // devuelven las sesiones anteriores a que esto existiera — y leerlas no
                         // inventa un principal para ellas.
                         'by' => \is_array($p['by'] ?? null) ? Principal::fromArray($p['by']) : null,
+                        // El proceso que la materializó, al lado y nunca en lugar del actor.
+                        'executor' => \is_string($p['executor'] ?? null) ? $p['executor'] : null,
                     ],
                     $pregunta = null,
                     $turnos[] = [
@@ -139,6 +163,17 @@ final readonly class SessionReducer
                 SessionEvent::ModeChanged => $mode = AutonomyMode::tryFrom(
                     \is_string($p['mode'] ?? null) ? $p['mode'] : '',
                 ) ?? $mode,
+                // LOS DOS HECHOS DE FRONTERA NO CAMBIAN EL FOLD, y decirlo aquí es la decisión que el
+                // `match` exhaustivo obliga a tomar en vez de dejar pasar:
+                //
+                // · `EndedWithOpenWork` describe lo que se observó AL CERRAR, y el estado que
+                //   agregaría —qué quedó abierto— ya se deriva de los propios pendientes. Duplicarlo
+                //   sería tener dos respuestas para «qué falta», y el día que difieran gana la
+                //   equivocada.
+                // · `TodosTransferred` vive en la sesión ORIGEN y habla de otra: las tarjetas que se
+                //   fueron llegan a la destino como sus propios `todo_changed`, en su stream. Aplicarlo
+                //   aquí borraría de la origen lo que sí pasó ahí.
+                SessionEvent::EndedWithOpenWork, SessionEvent::TodosTransferred => null,
                 SessionEvent::Ended => $terminada = \is_string($p['because'] ?? null) ? $p['because'] : 'sin motivo',
             };
         }
@@ -150,6 +185,9 @@ final readonly class SessionReducer
             mode: $mode,
             turns: $turnos,
             plan: $plan,
+            planVersion: $planVersion,
+            toolCalls: $herramientas,
+            mutations: $mutaciones,
             todos: array_values($todos),
             permissions: $permisos,
             summary: $resumen,
@@ -158,6 +196,16 @@ final readonly class SessionReducer
             decisions: $decisiones,
             endedBecause: $terminada,
         );
+    }
+
+    /** La tarjeta nueva con el origen que ya tenía, si lo tenía: nacer se declara una sola vez. */
+    private function conOrigen(Todo $nueva, ?Todo $previa): Todo
+    {
+        if ($nueva->origin !== null || $previa?->origin === null) {
+            return $nueva;
+        }
+
+        return new Todo($nueva->id, $nueva->text, $nueva->status, $nueva->version, $previa->origin, $nueva->mutationsAt);
     }
 
     /**

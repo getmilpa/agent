@@ -1,0 +1,149 @@
+No composer.lock file present. Updating dependencies to latest instead of installing from lock file. See https://getcomposer.org/install for more information.
+Loading composer repositories with package information
+Updating dependencies
+Lock file operations: 67 installs, 0 updates, 0 removals
+  - Locking clue/ndjson-react (v1.3.0)
+  - Locking composer/pcre (3.4.0)
+  - Locking composer/semver (3.4.4)
+  - Locking composer/xdebug-handler (3.0.5)
+  - Locking ergebnis/agent-detector (1.2.0)
+  - Locking evenement/evenement (v3.0.2)
+  - Locking fidry/cpu-core-counter (1.3.0)
+  - Locking friendsofphp/php-cs-fixer (v3.95.18)
+  - Locking milpa/core (v0.7.0)
+  - Locking milpa/event-store (v0.1.0)
+  - Locking myclabs/deep-copy (1.13.4)
+  - Locking nikic/php-parser (v5.8.0)
+  - Locking phar-io/manifest (2.0.4)
+  - Locking phar-io/version (3.2.1)
+  - Locking phpstan/phpdoc-parser (2.3.3)
+  - Locking phpstan/phpstan (2.2.7)
+  - Locking phpunit/php-code-coverage (11.0.12)
+  - Locking phpunit/php-file-iterator (5.1.1)
+  - Locking phpunit/php-invoker (5.0.1)
+  - Locking phpunit/php-text-template (4.0.1)
+  - Locking phpunit/php-timer (7.0.1)
+  - Locking phpunit/phpunit (11.5.56)
+  - Locking psr/container (2.0.2)
+  - Locking psr/event-dispatcher (1.0.0)
+  - Locking psr/log (3.0.2)
+  - Locking react/cache (v1.2.0)
+  - Locking react/child-process (v0.6.7)
+  - Locking react/dns (v1.14.0)
+  - Locking react/event-loop (v1.6.0)
+  - Locking react/promise (v3.3.0)
+  - Locking react/socket (v1.17.0)
+  - Locking react/stream (v1.4.0)
+  - Locking sebastian/cli-parser (3.0.2)
+  - Locking sebastian/code-unit (3.0.3)
+  - Locking sebastian/code-unit-reverse-lookup (4.0.1)
+  - Locking sebastian/comparator (6.3.3)
+  - Locking sebastian/complexity (4.0.1)
+  - Locking sebastian/diff (6.0.2)
+  - Locking sebastian/environment (7.2.1)
+  - Locking sebastian/exporter (6.3.2)
+  - Locking sebastian/global-state (7.0.2)
+  - Locking sebastian/lines-of-code (3.0.1)
+  - Locking sebastian/object-enumerator (6.0.1)
+  - Locking sebastian/object-reflector (4.0.1)
+  - Locking sebastian/recursion-context (6.0.3)
+  - Locking sebastian/type (5.1.3)
+  - Locking sebastian/version (5.0.2)
+  - Locking staabm/side-effects-detector (1.0.5)
+  - Locking symfony/console (v7.4.15)
+  - Locking symfony/deprecation-contracts (v3.7.1)
+  - Locking symfony/event-dispatcher (v7.4.15)
+  - Locking symfony/event-dispatcher-contracts (v3.7.1)
+  - Locking symfony/filesystem (v7.4.15)
+  - Locking symfony/finder (v7.4.14)
+  - Locking symfony/options-resolver (v7.4.8)
+  - Locking symfony/polyfill-ctype (v1.37.0)
+  - Locking symfony/polyfill-intl-grapheme (v1.41.0)
+  - Locking symfony/polyfill-intl-normalizer (v1.38.0)
+  - Locking symfony/polyfill-mbstring (v1.38.2)
+  - Locking symfony/polyfill-php80 (v1.37.0)
+  - Locking symfony/polyfill-php81 (v1.38.1)
+  - Locking symfony/polyfill-php84 (v1.38.1)
+  - Locking symfony/process (v7.4.13)
+  - Locking symfony/service-contracts (v3.7.1)
+  - Locking symfony/stopwatch (v7.4.8)
+  - Locking symfony/string (v7.4.15)
+  - Locking theseer/tokenizer (1.3.1)
+Writing lock file
+Installing dependencies from lock file (including require-dev)
+Package operations: 67 installs, 0 updates, 0 removals
+    0 [>---------------------------]    0 [->--------------------------]
+  - Installing composer/pcre (3.4.0): Extracting archive
+  - Installing symfony/deprecation-contracts (v3.7.1): Extracting archive
+  - Installing psr/container (2.0.2): Extracting archive
+  - Installing symfony/service-contracts (v3.7.1): Extracting archive
+  - Installing symfony/stopwatch (v7.4.8): Extracting archive
+  - Installing symfony/process (v7.4.13): Extracting archive
+  - Installing symfony/polyfill-php84 (v1.38.1): Extracting archive
+  - Installing symfony/polyfill-php81 (v1.38.1): Extracting archive
+  - Installing symfony/polyfill-php80 (v1.37.0): Extracting archive
+  - Installing symfony/polyfill-mbstring (v1.38.2): Extracting archive
+  - Installing symfony/options-resolver (v7.4.8): Extracting archive
+  - Installing symfony/finder (v7.4.14): Extracting archive
+  - Installing symfony/polyfill-ctype (v1.37.0): Extracting archive
+  - Installing symfony/filesystem (v7.4.15): Extracting archive
+  - Installing psr/event-dispatcher (1.0.0): Extracting archive
+  - Installing symfony/event-dispatcher-contracts (v3.7.1): Extracting archive
+  - Installing symfony/event-dispatcher (v7.4.15): Extracting archive
+  - Installing symfony/polyfill-intl-normalizer (v1.38.0): Extracting archive
+  - Installing symfony/polyfill-intl-grapheme (v1.41.0): Extracting archive
+  - Installing symfony/string (v7.4.15): Extracting archive
+  - Installing symfony/console (v7.4.15): Extracting archive
+  - Installing sebastian/diff (6.0.2): Extracting archive
+  - Installing react/event-loop (v1.6.0): Extracting archive
+  - Installing evenement/evenement (v3.0.2): Extracting archive
+  - Installing react/stream (v1.4.0): Extracting archive
+  - Installing react/promise (v3.3.0): Extracting archive
+  - Installing react/cache (v1.2.0): Extracting archive
+  - Installing react/dns (v1.14.0): Extracting archive
+  - Installing react/socket (v1.17.0): Extracting archive
+  - Installing react/child-process (v0.6.7): Extracting archive
+  - Installing fidry/cpu-core-counter (1.3.0): Extracting archive
+  - Installing ergebnis/agent-detector (1.2.0): Extracting archive
+  - Installing psr/log (3.0.2): Extracting archive
+  - Installing composer/xdebug-handler (3.0.5): Extracting archive
+  - Installing composer/semver (3.4.4): Extracting archive
+  - Installing clue/ndjson-react (v1.3.0): Extracting archive
+  - Installing friendsofphp/php-cs-fixer (v3.95.18): Extracting archive
+  - Installing milpa/core (v0.7.0): Extracting archive
+  - Installing milpa/event-store (v0.1.0): Extracting archive
+  - Installing phpstan/phpdoc-parser (2.3.3): Extracting archive
+  - Installing phpstan/phpstan (2.2.7): Extracting archive
+  - Installing staabm/side-effects-detector (1.0.5): Extracting archive
+  - Installing sebastian/version (5.0.2): Extracting archive
+  - Installing sebastian/type (5.1.3): Extracting archive
+  - Installing sebastian/recursion-context (6.0.3): Extracting archive
+  - Installing sebastian/object-reflector (4.0.1): Extracting archive
+  - Installing sebastian/object-enumerator (6.0.1): Extracting archive
+  - Installing sebastian/global-state (7.0.2): Extracting archive
+  - Installing sebastian/exporter (6.3.2): Extracting archive
+  - Installing sebastian/environment (7.2.1): Extracting archive
+  - Installing sebastian/comparator (6.3.3): Extracting archive
+  - Installing sebastian/code-unit (3.0.3): Extracting archive
+  - Installing sebastian/cli-parser (3.0.2): Extracting archive
+  - Installing phpunit/php-timer (7.0.1): Extracting archive
+  - Installing phpunit/php-text-template (4.0.1): Extracting archive
+  - Installing phpunit/php-invoker (5.0.1): Extracting archive
+  - Installing phpunit/php-file-iterator (5.1.1): Extracting archive
+  - Installing theseer/tokenizer (1.3.1): Extracting archive
+  - Installing nikic/php-parser (v5.8.0): Extracting archive
+  - Installing sebastian/lines-of-code (3.0.1): Extracting archive
+  - Installing sebastian/complexity (4.0.1): Extracting archive
+  - Installing sebastian/code-unit-reverse-lookup (4.0.1): Extracting archive
+  - Installing phpunit/php-code-coverage (11.0.12): Extracting archive
+  - Installing phar-io/version (3.2.1): Extracting archive
+  - Installing phar-io/manifest (2.0.4): Extracting archive
+  - Installing myclabs/deep-copy (1.13.4): Extracting archive
+  - Installing phpunit/phpunit (11.5.56): Extracting archive
+  0/67 [>---------------------------]   0%
+ 66/67 [===========================>]  98%
+ 67/67 [============================] 100%
+3 package suggestions were added by new dependencies, use `composer suggest` to see details.
+Generating autoload files
+57 packages you are using are looking for funding.
+Use the `composer fund` command to find out more!

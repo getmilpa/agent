@@ -9,6 +9,7 @@ use Milpa\Agent\PendingQuestion;
 use Milpa\Agent\Principal;
 use Milpa\Agent\SessionStore;
 use Milpa\Agent\Todo;
+use Milpa\Agent\TodoOrigin;
 use Milpa\Agent\TodoStatus;
 use Milpa\EventStore\Event;
 use Milpa\EventStore\InMemoryEventStore;
@@ -456,5 +457,391 @@ final class SessionStoreTest extends TestCase
         self::assertFalse((Principal::fromArray(['id' => 'actor:x']))?->verified);
         self::assertFalse((Principal::fromArray(['id' => 'actor:x', 'verified' => 'sí']))?->verified);
         self::assertNull(Principal::fromArray(['verified' => true]), 'sin id no hay principal');
+    }
+
+    /**
+     * El plan se SUPERSEDE, no se reescribe: cada cambio avanza la versión y declara a cuál reemplaza.
+     *
+     * Antes cada `plan_set` decía «el plan es esto» sin relación con el anterior, y un stream con
+     * cinco planes sueltos conserva los hechos y pierde el linaje — nadie puede decir cuál sustituyó
+     * a cuál. Medido en Q-P19-C: cinco sesiones reescribieron su plan con texto distinto.
+     */
+    public function testTheePlanIsSupersededAndCarriesItsLineage(): void
+    {
+        $eventos = new InMemoryEventStore();
+        $almacen = new SessionStore($eventos);
+        $almacen->start('s1', 'x');
+
+        $almacen->setPlan('s1', '1. mirar');
+        self::assertSame(1, $almacen->load('s1')?->planVersion, 'el primero no supersede a nadie');
+
+        $almacen->setPlan('s1', '1. mirar  2. clasificar');
+        self::assertSame(2, $almacen->load('s1')?->planVersion);
+
+        $eventos = array_values(array_filter(
+            $eventos->replay('agent-session:s1'),
+            static fn ($e): bool => $e->type === 'session.plan_set',
+        ));
+
+        self::assertNull($eventos[0]->payload['supersedes'], 'el primero no reemplaza nada');
+        self::assertSame(1, $eventos[1]->payload['supersedes'], 'el segundo dice a quién reemplaza');
+    }
+
+    /**
+     * Reescribir el MISMO texto no supersede nada, y el evento se apenda igual.
+     *
+     * Las dos mitades importan. La versión no avanza porque no hubo reemplazo — inflarla convertiría
+     * el linaje en ruido. Y el evento SÍ queda porque pasó: que el agente vuelva a declarar el plan
+     * que ya tenía es un dato sobre el sistema —no tiene cómo saber que ya lo puso— y borrarlo sería
+     * decidir por adelantado que no interesa.
+     */
+    public function testRewritingTheSamePlanSupersedesNothing(): void
+    {
+        $eventos = new InMemoryEventStore();
+        $almacen = new SessionStore($eventos);
+        $almacen->start('s1', 'x');
+        $almacen->setPlan('s1', '1. mirar');
+        $almacen->setPlan('s1', '1. mirar');
+
+        self::assertSame(1, $almacen->load('s1')?->planVersion, 'no avanzó');
+
+        $planes = array_values(array_filter(
+            $eventos->replay('agent-session:s1'),
+            static fn ($e): bool => $e->type === 'session.plan_set',
+        ));
+
+        self::assertCount(2, $planes, 'los dos hechos quedan en el stream');
+        self::assertNull($planes[1]->payload['supersedes'], 'el segundo no reemplaza a nadie');
+    }
+
+    /** Una sesión sin plan está en versión cero: no hubo linaje, no se inventa uno. */
+    public function testASessionWithNoPlanIsAtVersionZero(): void
+    {
+        $almacen = $this->store();
+        $almacen->start('s1', 'x');
+
+        self::assertSame(0, $almacen->load('s1')?->planVersion);
+    }
+
+    /**
+     * Una tarjeta declara DE DÓNDE A DÓNDE se movió, y a qué versión reemplaza.
+     *
+     * Antes el evento decía «está en X» y nada más: quién la movió desde dónde había que deducirlo
+     * comparando con lo visto antes, y esa deducción vivía en los scripts de análisis y no en el
+     * hecho. Dos lectores podían reconstruir historias distintas del mismo stream.
+     */
+    public function testATodoDeclaresWhereItCameFromAndWhatItSupersedes(): void
+    {
+        $eventos = new InMemoryEventStore();
+        $almacen = new SessionStore($eventos);
+        $almacen->start('s1', 'x');
+
+        $almacen->setTodo('s1', new Todo('t1', 'mirar', TodoStatus::Pending));
+        $almacen->setTodo('s1', new Todo('t1', 'mirar', TodoStatus::InProgress));
+        $almacen->setTodo('s1', new Todo('t1', 'mirar', TodoStatus::Done));
+
+        $cambios = array_values(array_filter(
+            $eventos->replay('agent-session:s1'),
+            static fn ($e): bool => $e->type === 'session.todo_changed',
+        ));
+
+        self::assertNull($cambios[0]->payload['from'], 'al nacer no viene de ningún lado');
+        self::assertNull($cambios[0]->payload['supersedes']);
+        self::assertSame(1, $cambios[0]->payload['version']);
+
+        self::assertSame('pending', $cambios[1]->payload['from'], 'el movimiento se lee, no se deduce');
+        self::assertSame(1, $cambios[1]->payload['supersedes']);
+        self::assertSame(2, $cambios[1]->payload['version']);
+
+        self::assertSame('in_progress', $cambios[2]->payload['from']);
+        self::assertSame(3, $cambios[2]->payload['version']);
+    }
+
+    /**
+     * Una tarjeta que NACE terminada no dice que viene de `pending`.
+     *
+     * Es la conducta dominante que midió Q-P19-C —12 de 16 corridas— y la tentación era rellenar
+     * `from: pending` para que el tablero pudiera animar el movimiento. Sería inventar una columna
+     * que la tarjeta nunca ocupó: el mejor riel no fuerza a que todo se mueva, fuerza a que cada
+     * tarjeta declare honestamente cómo nació.
+     */
+    public function testATodoBornDoneDoesNotClaimToComeFromPending(): void
+    {
+        $eventos = new InMemoryEventStore();
+        $almacen = new SessionStore($eventos);
+        $almacen->start('s1', 'x');
+
+        $almacen->setTodo('s1', new Todo('t1', 'ya lo hice', TodoStatus::Done));
+
+        $cambio = array_values(array_filter(
+            $eventos->replay('agent-session:s1'),
+            static fn ($e): bool => $e->type === 'session.todo_changed',
+        ))[0];
+
+        self::assertSame('done', $cambio->payload['status']);
+        self::assertNull($cambio->payload['from'], 'no cruzó ninguna columna y no dice que sí');
+    }
+
+    /** Re-declarar la misma tarjeta no supersede nada, y el evento queda igual. */
+    public function testRedeclaringTheSameTodoSupersedesNothing(): void
+    {
+        $eventos = new InMemoryEventStore();
+        $almacen = new SessionStore($eventos);
+        $almacen->start('s1', 'x');
+
+        $almacen->setTodo('s1', new Todo('t1', 'mirar', TodoStatus::Pending));
+        $almacen->setTodo('s1', new Todo('t1', 'mirar', TodoStatus::Pending));
+
+        $cambios = array_values(array_filter(
+            $eventos->replay('agent-session:s1'),
+            static fn ($e): bool => $e->type === 'session.todo_changed',
+        ));
+
+        self::assertCount(2, $cambios, 'los dos hechos quedan en el stream');
+        self::assertSame(1, $cambios[1]->payload['version'], 'la versión no avanzó');
+        self::assertNull($cambios[1]->payload['supersedes']);
+        self::assertSame(1, $almacen->load('s1')?->todos[0]->version);
+    }
+
+    /**
+     * Las cuatro formas de nacer, DERIVADAS y no preguntadas.
+     *
+     * Pedirle al agente que etiquete el origen sería agregarle una decisión, y el sistema ya sabe lo
+     * que hace falta: cuántas herramientas corrieron antes. Una etiqueta declarada por quien escribe
+     * es una afirmación; una derivada del stream es una observación, y cuando se pueden tener las dos
+     * gana la observación.
+     */
+    public function testHowATodoWasBornIsDerivedFromTheStreamAndNotAsked(): void
+    {
+        $sinTrabajo = $this->store();
+        $sinTrabajo->start('s1', 'x');
+        $sinTrabajo->setTodo('s1', new Todo('t1', 'voy a hacerlo', TodoStatus::Pending));
+        $sinTrabajo->setTodo('s1', new Todo('t2', 'ya lo hice', TodoStatus::Done));
+
+        $porId = [];
+        foreach ($sinTrabajo->load('s1')?->todos ?? [] as $t) {
+            $porId[$t->id] = $t;
+        }
+
+        self::assertSame(TodoOrigin::Planned, $porId['t1']->origin, 'sin trabajo previo: es intención');
+        self::assertSame(
+            TodoOrigin::Unsupported,
+            $porId['t2']->origin,
+            'nace hecha sin que nada la respalde — Q-P19-C midió cero de éstas, y por eso se nombra ahora',
+        );
+
+        $conTrabajo = $this->store();
+        $conTrabajo->start('s2', 'x');
+        $conTrabajo->recordToolCall('s2', 'plugins_architecture', [], 'ok');
+        $conTrabajo->setTodo('s2', new Todo('t3', 'apareció al mirar', TodoStatus::Pending));
+        $conTrabajo->setTodo('s2', new Todo('t4', 'lo hice', TodoStatus::Done));
+
+        $porId2 = [];
+        foreach ($conTrabajo->load('s2')?->todos ?? [] as $t) {
+            $porId2[$t->id] = $t;
+        }
+
+        self::assertSame(TodoOrigin::Discovered, $porId2['t3']->origin);
+        self::assertSame(TodoOrigin::Retrospective, $porId2['t4']->origin);
+    }
+
+    /**
+     * El origen sobrevive al movimiento: nacer se declara UNA vez.
+     *
+     * El evento sólo lo lleva al nacer —un movimiento tiene un `from`, no un origen— así que sin esto
+     * la tarjeta perdería su origen en cuanto se moviera, y el tablero no podría distinguir una
+     * tarjeta planeada que avanzó de una que apareció ya empezada.
+     */
+    public function testTheOriginSurvivesEveryMove(): void
+    {
+        $almacen = $this->store();
+        $almacen->start('s1', 'x');
+        $almacen->setTodo('s1', new Todo('t1', 'mirar', TodoStatus::Pending));
+        $almacen->setTodo('s1', new Todo('t1', 'mirar', TodoStatus::InProgress));
+        $almacen->setTodo('s1', new Todo('t1', 'mirar', TodoStatus::Done));
+
+        $tarjeta = ($almacen->load('s1')?->todos ?? [])[0] ?? null;
+
+        self::assertSame(TodoOrigin::Planned, $tarjeta?->origin, 'nació planeada y sigue siéndolo');
+        self::assertSame(TodoStatus::Done, $tarjeta?->status);
+        self::assertSame(3, $tarjeta?->version);
+    }
+
+    /**
+     * Terminar con trabajo abierto lo DECLARA, y no lo cierra.
+     *
+     * Q-P19-C midió 4 de 16 corridas que contestaron dejando una tarjeta sin cerrar, y el sistema no
+     * decía nada al respecto: la tarjeta se quedaba en su columna y nadie podía distinguir «se hizo
+     * todo» de «se acabó la sesión a media tarea».
+     *
+     * Y no las marca abandonadas: el sistema no sabe por qué se detuvo el trabajo —pudo esperar
+     * autoridad humana, topar el contexto, transferirse, fallar, o dejarse a propósito— así que
+     * declara lo observado.
+     */
+    public function testEndingWithOpenWorkDeclaresItInsteadOfClosingIt(): void
+    {
+        $eventos = new InMemoryEventStore();
+        $almacen = new SessionStore($eventos);
+        $almacen->start('s1', 'x');
+        $almacen->setTodo('s1', new Todo('t1', 'terminada', TodoStatus::Done));
+        $almacen->setTodo('s1', new Todo('t2', 'a medias', TodoStatus::InProgress));
+        $almacen->setTodo('s1', new Todo('t3', 'trabada', TodoStatus::Blocked));
+
+        $almacen->end('s1', 'se acabó');
+
+        $declarado = array_values(array_filter(
+            $eventos->replay('agent-session:s1'),
+            static fn ($e): bool => $e->type === 'session.ended_with_open_work',
+        ));
+
+        self::assertCount(1, $declarado);
+        $ids = array_column($declarado[0]->payload['todos'], 'id');
+        self::assertSame(['t2', 't3'], $ids, 'bloqueada cuenta como abierta: está detenida, no terminada');
+        self::assertSame('open', $declarado[0]->payload['todos'][0]['disposition'], 'lo observado, no un juicio');
+
+        $sesion = $almacen->load('s1');
+        self::assertSame(TodoStatus::InProgress, $sesion?->todos[1]->status, 'y NO se cerraron');
+    }
+
+    /** Una sesión que termina sin trabajo abierto no declara nada: no hay nada que decir. */
+    public function testEndingCleanDeclaresNothing(): void
+    {
+        $eventos = new InMemoryEventStore();
+        $almacen = new SessionStore($eventos);
+        $almacen->start('s1', 'x');
+        $almacen->setTodo('s1', new Todo('t1', 'lista', TodoStatus::Done));
+        $almacen->end('s1', 'listo');
+
+        $declarado = array_filter(
+            $eventos->replay('agent-session:s1'),
+            static fn ($e): bool => $e->type === 'session.ended_with_open_work',
+        );
+
+        self::assertSame([], $declarado);
+    }
+
+    /**
+     * El trabajo abierto se HEREDA con su linaje: quién lo tenía, cómo nació, desde qué versión.
+     *
+     * La continuidad pertenece al sistema, no a la sesión. Una tarjeta que cambia de dueño y pierde
+     * su historia es una tarjeta nueva con el mismo texto, y el tablero que la pinte no podría decir
+     * que ya se había trabajado en ella.
+     */
+    public function testOpenWorkIsInheritedWithItsLineage(): void
+    {
+        $eventos = new InMemoryEventStore();
+        $almacen = new SessionStore($eventos);
+        $almacen->start('vieja', 'x');
+        $almacen->recordToolCall('vieja', 'plugins_architecture', [], 'ok');
+        $almacen->setTodo('vieja', new Todo('t1', 'a medias', TodoStatus::Pending));
+        $almacen->setTodo('vieja', new Todo('t1', 'a medias', TodoStatus::InProgress));
+        $almacen->start('nueva', 'sigo yo');
+
+        $movidas = $almacen->transferOpenTodos('vieja', 'nueva');
+
+        self::assertSame(1, $movidas);
+
+        $heredada = ($almacen->load('nueva')?->todos ?? [])[0] ?? null;
+        self::assertSame('t1', $heredada?->id);
+        self::assertSame(TodoStatus::InProgress, $heredada?->status, 'llega donde estaba');
+        self::assertSame(
+            TodoOrigin::Discovered,
+            $heredada?->origin,
+            'y con cómo nació — se descubrió trabajando, y eso no cambia al cambiar de dueño',
+        );
+
+        $traslado = array_values(array_filter(
+            $eventos->replay('agent-session:vieja'),
+            static fn ($e): bool => $e->type === 'session.todos_transferred',
+        ));
+        self::assertSame('nueva', $traslado[0]->payload['to'], 'la origen dice a dónde se fueron');
+        self::assertSame(2, $traslado[0]->payload['todos'][0]['version'], 'y desde qué versión');
+    }
+
+    /** Transferir cuando no hay nada abierto no es un error: es una sesión que terminó limpia. */
+    public function testTransferringNothingIsNotAnError(): void
+    {
+        $almacen = $this->store();
+        $almacen->start('vieja', 'x');
+        $almacen->setTodo('vieja', new Todo('t1', 'lista', TodoStatus::Done));
+        $almacen->start('nueva', 'y');
+
+        self::assertSame(0, $almacen->transferOpenTodos('vieja', 'nueva'));
+    }
+
+    /**
+     * EL INVARIANTE: cuántas cosas cambiaron mientras una tarjeta declarada seguía abierta.
+     *
+     * Es la pregunta de Rod reducida a lo que el sistema puede contestar **sin cooperación del
+     * agente**: no «¿esta mutación corresponde a esta tarjeta?» —eso pediría semántica y acabaría en
+     * un verificador que interpreta todo— sino «¿cuántas mutaciones ocurrieron desde que nadie toca
+     * esta tarjeta?».
+     *
+     * No dice que esté mal. Dice que **no se explicó**, y eso sí es verificable.
+     */
+    public function testTheSystemCountsWhatChangedWhileADeclaredTodoStayedOpen(): void
+    {
+        $eventos = new InMemoryEventStore();
+        $almacen = new SessionStore($eventos);
+        $almacen->start('s1', 'x');
+
+        $almacen->setTodo('s1', new Todo('t1', 'apagar el viejo', TodoStatus::Pending));
+        $almacen->recordToolCall('s1', 'plugins_disable', [], 'ok', true, mutating: true);
+        $almacen->recordToolCall('s1', 'plugins_architecture', [], 'ok', true, mutating: false);
+        $almacen->recordToolCall('s1', 'plugins_enable', [], 'ok', true, mutating: true);
+
+        $almacen->end('s1', 'se acabó');
+
+        $declarado = array_values(array_filter(
+            $eventos->replay('agent-session:s1'),
+            static fn ($e): bool => $e->type === 'session.ended_with_open_work',
+        ))[0];
+
+        self::assertSame(
+            2,
+            $declarado->payload['todos'][0]['mutationsSince'],
+            'dos mutaciones desde que la tarjeta se tocó; la consulta no cuenta',
+        );
+    }
+
+    /**
+     * Una tarjeta que queda abierta sin que pasara nada más NO tiene nada que explicar.
+     *
+     * Es la mitad que evita que el invariante se vuelva una alarma constante: quedar abierto no es el
+     * problema. El problema es quedar abierto mientras el mundo cambia alrededor.
+     */
+    public function testATodoLeftOpenWithNothingHappeningHasNothingToExplain(): void
+    {
+        $eventos = new InMemoryEventStore();
+        $almacen = new SessionStore($eventos);
+        $almacen->start('s1', 'x');
+        $almacen->setTodo('s1', new Todo('t1', 'pendiente', TodoStatus::Pending));
+        $almacen->end('s1', 'se acabó');
+
+        $declarado = array_values(array_filter(
+            $eventos->replay('agent-session:s1'),
+            static fn ($e): bool => $e->type === 'session.ended_with_open_work',
+        ))[0];
+
+        self::assertSame(0, $declarado->payload['todos'][0]['mutationsSince']);
+    }
+
+    /** Tocar la tarjeta pone el contador a cero: moverla ES explicarla. */
+    public function testTouchingTheTodoResetsWhatItHasToExplain(): void
+    {
+        $eventos = new InMemoryEventStore();
+        $almacen = new SessionStore($eventos);
+        $almacen->start('s1', 'x');
+        $almacen->setTodo('s1', new Todo('t1', 'apagar', TodoStatus::Pending));
+        $almacen->recordToolCall('s1', 'plugins_disable', [], 'ok', true, mutating: true);
+        $almacen->setTodo('s1', new Todo('t1', 'apagar', TodoStatus::InProgress));
+        $almacen->end('s1', 'se acabó');
+
+        $declarado = array_values(array_filter(
+            $eventos->replay('agent-session:s1'),
+            static fn ($e): bool => $e->type === 'session.ended_with_open_work',
+        ))[0];
+
+        self::assertSame(0, $declarado->payload['todos'][0]['mutationsSince']);
     }
 }

@@ -40,7 +40,15 @@ use Milpa\EventStore\EventStoreInterface;
  */
 final readonly class SessionStore
 {
-    private const PREFIX = 'agent-session:';
+    /**
+     * El prefijo de stream de toda sesión.
+     *
+     * Público desde que existe {@see SessionProjector}: una superficie que traduce eventos tiene que
+     * saber cuál es el id de la sesión dentro del stream, y la alternativa era que se lo escribiera a
+     * mano. Dos lugares con la misma cadena escrita aparte es como se llega a que un proyector deje
+     * de reconocer los streams que el almacén escribe.
+     */
+    public const PREFIX = 'agent-session:';
 
     public function __construct(private EventStoreInterface $events)
     {
@@ -159,13 +167,23 @@ final readonly class SessionStore
      *
      * @param array<string, mixed> $arguments
      */
-    public function recordToolCall(string $id, string $tool, array $arguments, string $result, bool $ok = true): void
-    {
+    public function recordToolCall(
+        string $id,
+        string $tool,
+        array $arguments,
+        string $result,
+        bool $ok = true,
+        bool $mutating = false,
+    ): void {
         $this->append($id, SessionEvent::ToolCalled, [
             'tool' => $tool,
             'arguments' => $arguments,
             'result' => $result,
             'ok' => $ok,
+            // SI ESTA LLAMADA CAMBIÓ ALGO. Lo sabe quien tiene la operación —la compuerta— y hasta
+            // ahora no lo escribía, así que el stream no distinguía mirar de mover. Sin esa
+            // distinción no se puede verificar nada sobre las mutaciones: son invisibles como tales.
+            'mutating' => $mutating,
         ]);
     }
 
@@ -184,13 +202,83 @@ final readonly class SessionStore
     /** Fija el plan de trabajo (P16.3). */
     public function setPlan(string $id, string $plan): void
     {
-        $this->append($id, SessionEvent::PlanSet, ['plan' => $plan]);
+        // LA HISTORIA NO SE REESCRIBE, SE SUPERSEDE. Antes cada `plan_set` decía «el plan es esto» sin
+        // relación con el anterior: cinco sesiones de Q-P19-C reescribieron su plan con texto distinto
+        // y el stream se quedó con cinco planes sueltos, sin decir cuál sustituye a cuál. Un log
+        // append-only que no declara el reemplazo conserva los hechos y pierde el linaje.
+        //
+        // La versión la calcula ESTE método y no quien llama: pedirle al agente que numere sus planes
+        // sería una decisión más que puede errar, y el número tiene que ser correcto para que la
+        // cadena se pueda leer.
+        $anterior = $this->load($id);
+        $version = $anterior instanceof Session ? $anterior->planVersion : 0;
+
+        // Reescribir el MISMO texto no supersede nada: el evento se apenda igual —pasó, y el stream
+        // registra lo que pasó— pero la versión no avanza y no reemplaza a nadie. Así el linaje por
+        // versión cuenta la historia del plan, y el stream crudo sigue mostrando que el agente lo
+        // volvió a declarar, que es un dato sobre el sistema y no sobre él.
+        $cambio = ($anterior instanceof Session ? $anterior->plan : null) !== $plan;
+
+        $this->append($id, SessionEvent::PlanSet, [
+            'plan' => $plan,
+            'version' => $cambio ? $version + 1 : $version,
+            'supersedes' => $cambio && $version > 0 ? $version : null,
+        ]);
     }
 
-    /** Crea o mueve un pendiente (P16.3). */
+    /**
+     * Crea o mueve un pendiente (P16.3), declarando **de dónde a dónde**.
+     *
+     * ── LA MISMA DOCTRINA QUE EL PLAN: NO SE REESCRIBE, SE SUPERSEDE ────────────────────────────
+     *
+     * Antes el evento decía «esta tarjeta está en X» y nada más. Quién la movió desde dónde había que
+     * **deducirlo** comparando con lo que se hubiera visto antes en el stream — y esa deducción vivía
+     * en los scripts de análisis, no en el hecho. Dos lectores podían reconstruir historias distintas
+     * del mismo stream, que es justo lo que un log append-only existe para impedir.
+     *
+     * Ahora cada evento lleva su versión, la versión a la que reemplaza, y el estado del que viene.
+     * Un tablero **lee** el movimiento en vez de inferirlo.
+     *
+     * Como con el plan: re-declarar la MISMA tarjeta —mismo texto, mismo estado— no supersede nada y
+     * no avanza la versión, pero el evento se apenda igual, porque ocurrió.
+     */
     public function setTodo(string $id, Todo $todo): void
     {
-        $this->append($id, SessionEvent::TodoChanged, $todo->toArray());
+        $sesion = $this->load($id);
+        $previo = null;
+        foreach ($sesion instanceof Session ? $sesion->todos : [] as $t) {
+            if ($t->id === $todo->id) {
+                $previo = $t;
+
+                break;
+            }
+        }
+
+        $cambio = $previo === null
+            || $previo->status !== $todo->status
+            || $previo->text !== $todo->text;
+        $version = $previo === null ? 1 : ($cambio ? $previo->version + 1 : $previo->version);
+
+        $this->append($id, SessionEvent::TodoChanged, [
+            ...$todo->toArray(),
+            'version' => $version,
+            // CUÁNTAS MUTACIONES LLEVABA LA SESIÓN cuando esta tarjeta se tocó por última vez. Es el
+            // dato que permite preguntar después, sin cooperación de nadie: ¿cuántas cosas cambiaron
+            // en el mundo desde que nadie mira esta tarjeta?
+            'mutationsAt' => $sesion instanceof Session ? $sesion->mutations : 0,
+            // CÓMO NACIÓ, derivado y no preguntado. Sólo al nacer: un movimiento posterior no tiene
+            // origen, tiene un `from` — y ponerle uno sería reescribir cómo apareció cada vez que se
+            // mueve ({@see TodoOrigin}).
+            'origin' => $previo === null
+                ? TodoOrigin::derive($todo->status, $sesion instanceof Session ? $sesion->toolCalls : 0)->value
+                : null,
+            // A qué versión de ESTA tarjeta reemplaza. `null` al nacer: no reemplaza a nadie.
+            'supersedes' => $cambio && $previo !== null ? $previo->version : null,
+            // DE DÓNDE VIENE. Es el dato que el tablero necesita para pintar un movimiento y el que
+            // antes había que deducir. `null` al nacer — una tarjeta que aparece no viene de ningún
+            // lado, y decir que viene de `pending` sería inventar una columna que nunca ocupó.
+            'from' => $cambio && $previo !== null ? $previo->status->value : null,
+        ]);
     }
 
     /** Levanta la mano: la sesión queda en pausa hasta que alguien conteste (P16.4). */
@@ -249,12 +337,21 @@ final readonly class SessionStore
      * un permiso sin principal no es auditable ({@see Principal}). Y va como objeto y no como cadena
      * para que la respuesta cargue si esa identidad se verificó o sólo se declaró.
      */
-    public function answer(string $id, string $questionId, string $answer, ?Principal $by = null): void
-    {
+    public function answer(
+        string $id,
+        string $questionId,
+        string $answer,
+        ?Principal $by = null,
+        ?string $executor = null,
+    ): void {
         $this->append($id, SessionEvent::QuestionAnswered, [
             'id' => $questionId,
             'answer' => $answer,
             'by' => $by?->toArray(),
+            // EL EJECUTOR ACOMPAÑA AL ACTOR, no lo sustituye. Son dos identidades: quién autorizó y
+            // qué proceso lo materializó. Anotar el proceso donde había una persona identificada
+            // convierte una cadena de custodia real en una falsa.
+            'executor' => $executor,
         ]);
     }
 
@@ -284,7 +381,123 @@ final readonly class SessionStore
     /** Cierra la sesión con el motivo por el que se cerró. */
     public function end(string $id, string $because): void
     {
+        // ANTES DE CERRAR, DECIR QUÉ QUEDÓ ABIERTO. Sin esto, una sesión que termina con trabajo
+        // declarado y sin resolver no dice nada al respecto: las tarjetas se quedan en su columna y
+        // nadie puede distinguir «se hizo todo» de «se acabó la sesión a media tarea».
+        //
+        // No las cierra, y ésa es la decisión: el sistema no sabe por qué se detuvo el trabajo, así
+        // que las declara `Open` —lo observado— en vez de «abandonadas», que sería inferir un juicio
+        // de una ausencia ({@see TodoDisposition}).
+        $sesion = $this->load($id);
+        $abiertas = [];
+        foreach ($this->openTodos($id) as $todo) {
+            $abiertas[] = [
+                'id' => $todo->id,
+                'status' => $todo->status->value,
+                'version' => $todo->version,
+                'disposition' => TodoDisposition::Open->value,
+                // EL INVARIANTE, y es lo único que este hecho afirma: cuántas mutaciones ocurrieron
+                // DESPUÉS de que esta tarjeta se tocó por última vez.
+                //
+                // `0` es una tarjeta que quedó abierta y sobre la que no pasó nada más — no hay nada
+                // que explicar. Un número alto es el sistema diciendo: cambiaron siete cosas y esta
+                // tarjeta no se movió ni se cerró. No dice que esté mal, dice que no se explicó.
+                'mutationsSince' => max(0, ($sesion instanceof Session ? $sesion->mutations : 0) - $todo->mutationsAt),
+            ];
+        }
+
+        if ($abiertas !== []) {
+            $this->append($id, SessionEvent::EndedWithOpenWork, ['todos' => $abiertas]);
+        }
+
         $this->append($id, SessionEvent::Ended, ['because' => $because]);
+    }
+
+    /**
+     * Los hechos de una sesión, en orden, desde `$since` en adelante.
+     *
+     * Existe para que una superficie —terminal, navegador, agente— consuma el stream **traducido por
+     * el mismo proyector** en vez de leerlo cruda cada quien. `$since` es la secuencia del último
+     * hecho que ya vio, así que ponerse al día y recibir lo nuevo son el mismo camino: dos caminos
+     * distintos son dos oportunidades de pintar distinto el mismo hecho.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function timeline(string $id, int $since = 0): array
+    {
+        $eventos = [];
+        foreach ($this->events->replay(self::PREFIX . $id) as $evento) {
+            if ($evento->seq > $since) {
+                $eventos[] = $evento;
+            }
+        }
+
+        return (new SessionProjector())->projectAll($eventos);
+    }
+
+    /**
+     * Las tarjetas de esta sesión que todavía no están en un estado terminal.
+     *
+     * `blocked` cuenta como abierta: bloqueada es trabajo detenido, no trabajo terminado, y meterla
+     * con `done` haría desaparecer justo lo que alguien tiene que ir a destrabar.
+     *
+     * @return list<Todo>
+     */
+    public function openTodos(string $id): array
+    {
+        $sesion = $this->load($id);
+        $abiertas = [];
+        foreach ($sesion instanceof Session ? $sesion->todos : [] as $todo) {
+            if ($todo->status !== TodoStatus::Done) {
+                $abiertas[] = $todo;
+            }
+        }
+
+        return $abiertas;
+    }
+
+    /**
+     * Pasa las tarjetas abiertas de una sesión a otra, con su linaje.
+     *
+     * ── QUIÉN HEREDA EL TRABAJO ─────────────────────────────────────────────────────────────────
+     *
+     * La pregunta es de Rod y es arquitectónica: terminar una sesión no debería matar trabajo que
+     * puede continuar. Este método es la respuesta mínima — alguien nombra la sesión que hereda, y el
+     * traslado deja hecho en las DOS: en la origen queda que se fueron y a dónde, y en la destino
+     * llegan con **cómo nacieron** y **desde qué versión vienen**.
+     *
+     * Una tarjeta que cambia de dueño y pierde su historia es una tarjeta nueva con el mismo texto, y
+     * el tablero que la pinte no podría decir que ya se había trabajado en ella.
+     *
+     * Devuelve cuántas se movieron. Cero si no había abiertas: transferir nada no es un error, es una
+     * sesión que terminó limpia.
+     */
+    public function transferOpenTodos(string $from, string $to): int
+    {
+        $abiertas = $this->openTodos($from);
+        if ($abiertas === []) {
+            return 0;
+        }
+
+        $ids = [];
+        foreach ($abiertas as $todo) {
+            $ids[] = ['id' => $todo->id, 'version' => $todo->version];
+
+            // Llega a la destino como una tarjeta nueva de ESE stream —versión 1 ahí— pero con su
+            // origen intacto y diciendo de dónde viene. El linaje no se reescribe: se continúa.
+            $this->append($to, SessionEvent::TodoChanged, [
+                ...$todo->toArray(),
+                'version' => 1,
+                'supersedes' => null,
+                'from' => null,
+                'origin' => $todo->origin?->value,
+                'inheritedFrom' => ['session' => $from, 'version' => $todo->version],
+            ]);
+        }
+
+        $this->append($from, SessionEvent::TodosTransferred, ['to' => $to, 'todos' => $ids]);
+
+        return \count($abiertas);
     }
 
     /**

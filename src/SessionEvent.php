@@ -96,6 +96,36 @@ enum SessionEvent: string
     /** Cambió el modo de autonomía de la sesión (P16.6). */
     case ModeChanged = 'session.mode_changed';
 
+    /**
+     * La sesión terminó **dejando trabajo declarado sin cerrar**, y eso se dice.
+     *
+     * ── POR QUÉ ES UN HECHO APARTE Y NO UN CAMPO DE `Ended` ─────────────────────────────────────
+     *
+     * Porque terminar y dejar trabajo abierto son dos cosas: una sesión puede terminar limpia. Meter
+     * la lista dentro del `ended` obligaría a leer el motivo de cierre para saber si quedó algo, y a
+     * quien busca trabajo huérfano le interesa lo segundo sin lo primero.
+     *
+     * ── Y POR QUÉ NO LAS CIERRA ─────────────────────────────────────────────────────────────────
+     *
+     * Porque el sistema no sabe por qué se detuvo el trabajo. Puede haber esperado autoridad humana,
+     * haber topado el contexto, haberse transferido, haber fallado, o haberse dejado a propósito para
+     * retomar. Marcarlas «abandonadas» sería inferir un juicio de una ausencia — el default es
+     * {@see \Milpa\Agent\TodoDisposition::Open}, que dice lo que se observó y no lo que significa.
+     *
+     * La continuidad pertenece al sistema, no a la sesión: terminar una no mata trabajo que puede
+     * seguir en otra.
+     */
+    case EndedWithOpenWork = 'session.ended_with_open_work';
+
+    /**
+     * Un conjunto de tarjetas abiertas pasó a otra sesión, que ahora las tiene.
+     *
+     * Queda en el stream de la sesión ORIGEN. La sesión destino recibe las tarjetas con su linaje
+     * —cómo nacieron y por dónde pasaron— porque una tarjeta que cambia de dueño y pierde su historia
+     * es una tarjeta nueva con el mismo texto.
+     */
+    case TodosTransferred = 'session.todos_transferred';
+
     /** La sesión terminó, con el motivo por el que terminó. */
     case Ended = 'session.ended';
 }

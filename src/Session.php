@@ -55,6 +55,22 @@ final readonly class Session
         public AutonomyMode $mode = AutonomyMode::Ask,
         public array $turns = [],
         public ?string $plan = null,
+        // QUÉ VERSIÓN DEL PLAN ES ÉSTA. La historia no se reescribe, se supersede: cada vez que el
+        // plan cambia de contenido la versión avanza y el evento declara a cuál reemplaza. Reescribir
+        // el mismo texto NO avanza — no supersede nada.
+        //
+        // `0` significa que nunca hubo plan. Una sesión anterior a que esto existiera se reproduce con
+        // `1` si tiene alguno: es la mínima consistente con lo que quedó escrito, y no le inventa un
+        // linaje que nadie produjo.
+        public int $planVersion = 0,
+        // CUÁNTAS HERRAMIENTAS HAN CORRIDO en esta sesión. No es telemetría: es lo que le permite al
+        // sistema decidir, SIN preguntarle al agente, si una tarjeta nació antes o después del
+        // trabajo — y de ahí sale su origen ({@see TodoOrigin}).
+        public int $toolCalls = 0,
+        // CUÁNTAS DE ESAS CAMBIARON ALGO. Separado de `toolCalls` porque mirar y mover no son lo
+        // mismo, y el invariante que el sistema puede verificar sin cooperación del agente se cuenta
+        // sobre las mutaciones: cuántas cosas cambiaron mientras una tarjeta declarada seguía abierta.
+        public int $mutations = 0,
         public array $todos = [],
         public array $permissions = [],
         public ?string $summary = null,
