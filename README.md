@@ -1,4 +1,13 @@
 <p align="center">
+  <a href="https://github.com/getmilpa">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/getmilpa/core/main/art/lockup/milpa-lockup-v-color-dark.svg">
+      <img src="https://raw.githubusercontent.com/getmilpa/core/main/art/lockup/milpa-lockup-v-color-light.svg" alt="Milpa" width="300">
+    </picture>
+  </a>
+</p>
+
+<p align="center">
   <strong>Milpa Agent</strong><br>
   <em>Long-running coding sessions for the Milpa PHP framework.</em>
 </p>
@@ -179,3 +188,7 @@ variable is not a line.
 ## License
 
 Apache-2.0 © Rodrigo Vicente - TeamX Agency
+
+---
+
+Milpa is designed, built, and maintained by **[Rodrigo Vicente - TeamX Agency](https://teamx.agency/?utm_source=github&utm_medium=readme&utm_campaign=milpa&utm_content=agent)**.

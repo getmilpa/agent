@@ -95,10 +95,30 @@ if (!is_file($license)) {
     $fallos[] = 'LICENSE sin línea de copyright';
 }
 
+// 5 · README con la marca: el lockup arriba y la atribución al pie.
+//
+// Se agregó el 2026-08-01 porque cuatro paquetes habían perdido una de las dos y nadie lo notó: las
+// otras cuatro invariantes miran NOTICE, `composer.json`, headers y LICENSE — o sea lo legal y lo
+// interno— y ninguna mira lo ÚNICO que ve quien llega al repositorio desde afuera.
+//
+// Lo cazó Rod mirando los repos, que es exactamente el trabajo que un gate existe para ahorrarle.
+$readme = $raiz . '/README.md';
+if (!is_file($readme)) {
+    $fallos[] = 'sin README.md';
+} else {
+    $texto = (string) file_get_contents($readme);
+    if (!str_contains($texto, 'milpa-lockup')) {
+        $fallos[] = 'README sin el lockup de la familia';
+    }
+    if (!str_contains($texto, 'designed, built, and maintained by')) {
+        $fallos[] = 'README sin la atribución al pie';
+    }
+}
+
 $paquete = is_array($composer) ? (string) ($composer['name'] ?? basename($raiz)) : basename($raiz);
 
 if ($fallos === []) {
-    echo "atribución OK: {$paquete} conserva las cuatro invariantes (nombre canónico: \"{$nombre}\")", PHP_EOL;
+    echo "atribución OK: {$paquete} conserva las cinco invariantes (nombre canónico: \"{$nombre}\")", PHP_EOL;
 
     exit(0);
 }
