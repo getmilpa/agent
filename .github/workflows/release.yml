@@ -1,0 +1,26 @@
+name: Release
+
+# Automates versioning + CHANGELOG from Conventional Commits. release-please opens
+# a release PR; merging it tags vX.Y.Z (which Packagist picks up). Manifest mode
+# (config + manifest files) seeds the version line at 0.0.0 with
+# `bump-minor-pre-major`, so the project stays on a 0.x pre-1.0 line (a `feat`
+# bumps the minor, never jumping to 1.0.0) until 1.0 is cut deliberately.
+# release-type "simple" keeps a CHANGELOG + git tags without a version file —
+# right for a Composer library whose composer.json carries no "version" field.
+
+on:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: googleapis/release-please-action@v4
+        with:
+          config-file: .github/release-please-config.json
+          manifest-file: .github/.release-please-manifest.json

@@ -1,0 +1,43 @@
+name: Docs
+
+# Builds the API reference (family gen-docs from the milpa/core dist, dressed
+# with @milpa/design) and publishes it to GitHub Pages on every push to main —
+# docs stay in sync with the docblocks the CI gate enforces. Renders fully once
+# Pages is enabled (Settings → Pages → GitHub Actions).
+
+on:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+      - run: composer install --prefer-dist --no-interaction --no-progress
+      - run: php tools/gen-docs.php --out build/docs
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/docs
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: PHP ${{ matrix.php }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.3', '8.4']
+    continue-on-error: ${{ matrix.php == '8.4' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: xdebug
+
+      - name: Validate composer.json
+        run: composer validate --strict
+
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+      - name: License gate (runtime deps must be MIT / BSD / Apache-2.0 / ISC)
+        run: |
+          composer licenses --no-dev --format=json | php -r '$d=json_decode(stream_get_contents(STDIN),true)?:[];$allow="~^(MIT|BSD-[0-9].*|Apache-2\\.0|ISC)$~";$bad=[];foreach(($d["dependencies"]??[]) as $n=>$i){$ls=(array)($i["license"]??[]);if($ls===[]){$bad[]="$n: (none declared)";continue;}foreach($ls as $l){if(!preg_match($allow,(string)$l))$bad[]="$n: $l";}}if($bad){fwrite(STDERR,"Disallowed dependency licenses (only MIT/BSD/Apache-2.0/ISC allowed):\n- ".implode("\n- ",$bad)."\n");exit(1);}echo "license gate ok: ".count($d["dependencies"]??[])." runtime deps, all MIT/BSD/Apache-2.0/ISC\n";'
+
+      - name: PHP syntax
+        run: find src tests tools -name '*.php' -print0 | xargs -0 -n1 php -l >/dev/null
+
+      - name: Code style (family standard, php-cs-fixer dry-run)
+        env:
+          PHP_CS_FIXER_IGNORE_ENV: 1
+        run: vendor/bin/php-cs-fixer fix --dry-run --diff
+
+      - name: PHPStan
+        run: vendor/bin/phpstan analyse src --no-progress
+
+      - name: PHPUnit + coverage floor
+        env:
+          XDEBUG_MODE: coverage
+        run: |
+          vendor/bin/phpunit --testsuite Agent --coverage-clover=build/clover.xml
+          php tools/coverage-floor.php build/clover.xml 95
+
+      - name: DocBlock coverage gate
+        run: php tools/validate-docblocks.php
+
+      - name: Attribution gate
+        run: php tools/verify-attribution.php
