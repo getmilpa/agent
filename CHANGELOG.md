@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/getmilpa/agent/compare/v0.3.0...v0.4.0) (2026-08-02)
+
+
+### Features
+
+* questions carry a reason code, and decisions inherit reason and why ([0c3c7b5](https://github.com/getmilpa/agent/commit/0c3c7b51eb6cd7916642469ef6a81b68b2873d47))
+
 ## [0.3.0](https://github.com/getmilpa/agent/compare/v0.2.2...v0.3.0) (2026-08-02)
 
 
