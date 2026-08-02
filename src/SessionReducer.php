@@ -54,6 +54,8 @@ final readonly class SessionReducer
         $todos = [];
         /** @var list<string> $permisos */
         $permisos = [];
+        /** @var list<string> $retiradas */
+        $retiradas = [];
         $resumen = null;
         $compactadoHasta = 0;
         $pregunta = null;
@@ -138,6 +140,15 @@ final readonly class SessionReducer
                         'by' => \is_array($p['by'] ?? null) ? Principal::fromArray($p['by']) : null,
                         // El proceso que la materializó, al lado y nunca en lugar del actor.
                         'executor' => \is_string($p['executor'] ?? null) ? $p['executor'] : null,
+                        // POR QUÉ SE PREGUNTÓ y QUÉ SE ESTABA AUTORIZANDO, heredados de la pregunta.
+                        //
+                        // Sin esto, una decisión es un par pregunta-respuesta en prosa y nadie puede
+                        // consumirla sin parsear texto. Con esto, el contrato de intención (ADR-0044)
+                        // puede leer «esta operación, con estos argumentos, ya fue confirmada por el
+                        // humano» — que es lo que cierra el ciclo Pregunta → Nueva intención: una
+                        // confirmación que no destraba la re-propuesta sería teatro con acta.
+                        'reason' => $pregunta instanceof PendingQuestion ? $pregunta->reason : null,
+                        'why' => $pregunta instanceof PendingQuestion ? $pregunta->why : null,
                     ],
                     $pregunta = null,
                     $turnos[] = [
@@ -158,6 +169,12 @@ final readonly class SessionReducer
                     ],
                     $pregunta = null,
                 ],
+                // UNA OPCIÓN RETIRADA NO VUELVE en esta sesión. Es un hecho, no una preferencia: se
+                // apendó porque alguien con autoridad negó esa llamada, y reponerla sin otro hecho que
+                // lo diga sería una mesa que cambia sola.
+                SessionEvent::OptionRemoved => $retiradas = \in_array($o = (\is_string($p['option'] ?? null) ? $p['option'] : ''), $retiradas, true) || $o === ''
+                    ? $retiradas
+                    : [...$retiradas, $o],
                 SessionEvent::PermissionGranted => $permisos = $this->conPermiso($permisos, $p),
                 SessionEvent::PermissionRevoked => $permisos = $this->sinPermiso($permisos, $p),
                 SessionEvent::ModeChanged => $mode = AutonomyMode::tryFrom(
@@ -190,6 +207,7 @@ final readonly class SessionReducer
             mutations: $mutaciones,
             todos: array_values($todos),
             permissions: $permisos,
+            removedOptions: $retiradas,
             summary: $resumen,
             compactedThrough: $compactadoHasta,
             question: $pregunta,

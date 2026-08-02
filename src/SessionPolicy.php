@@ -116,6 +116,10 @@ final readonly class SessionPolicy
             // contestar es una decisión de producto, no un default que este paquete pueda inventar.
             // Lo que sí no podía pasar era que no se PUDIERA poner ({@see PendingQuestion}).
             expiresAt: $expiresAt?->format(\DateTimeInterface::ATOM),
+            // El código que el docblock de `reason` anuncia. Anunciarlo sin emitirlo era la misma
+            // clase de defecto que el «no calla» del juez con un NullLogger — lo cazó la revisión
+            // adversaria de Q-P19-M comparando la promesa contra el código.
+            reason: 'permission',
         );
     }
 
@@ -140,6 +144,7 @@ final readonly class SessionPolicy
                 . 'retoma la sesión.',
             options: [],
             why: $detalle,
+            reason: 'signature',
         );
     }
 }

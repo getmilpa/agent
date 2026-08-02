@@ -57,6 +57,16 @@ final readonly class PendingQuestion
         public array $options = [],
         public ?string $why = null,
         public ?string $expiresAt = null,
+        /**
+         * Por qué se preguntó, como CÓDIGO estable — `permission`, `signature`, `target_not_named`.
+         *
+         * El texto de `question` cambia —se redacta, se traduce—; el código no. Es el mismo idioma que
+         * `option_removed.reason.code`, y existe por lo mismo: una proyección que quiera contar
+         * cuántas pausas produjo el contrato de intención contra cuántas produjo la política de
+         * permisos tiene que poder hacerlo sin parsear prosa. `null` es «no se dijo», que es lo que
+         * devuelven las preguntas anteriores a que esto existiera.
+         */
+        public ?string $reason = null,
     ) {
     }
 
@@ -82,7 +92,7 @@ final readonly class PendingQuestion
     /**
      * Su forma serializable, la que viaja en el payload del evento.
      *
-     * @return array{id: string, question: string, options: list<string>, why: string|null, expiresAt: string|null}
+     * @return array{id: string, question: string, options: list<string>, why: string|null, expiresAt: string|null, reason: string|null}
      */
     public function toArray(): array
     {
@@ -92,6 +102,7 @@ final readonly class PendingQuestion
             'options' => $this->options,
             'why' => $this->why,
             'expiresAt' => $this->expiresAt,
+            'reason' => $this->reason,
         ];
     }
 
@@ -118,6 +129,7 @@ final readonly class PendingQuestion
             $opciones,
             \is_string($row['why'] ?? null) ? $row['why'] : null,
             \is_string($row['expiresAt'] ?? null) ? $row['expiresAt'] : null,
+            \is_string($row['reason'] ?? null) ? $row['reason'] : null,
         );
     }
 }

@@ -361,6 +361,39 @@ final readonly class SessionStore
      * Por operación y por sesión, nunca global: «sí a `make`, en esta sesión» es una frase que alguien
      * puede evaluar. «Sí a lo que el agente decida» no lo es.
      */
+    /**
+     * Retirar una opción de la mesa de esta sesión.
+     *
+     * Se llama cuando una autoridad ya negó esa llamada: la negativa deja de ser un mensaje y pasa a
+     * ser una mutación del entorno. Q-P19-D/E midieron que decirle que no —incluso nombrándole la
+     * alternativa— no lo redirige: 0 de 32 volvieron a llamar una herramienta. Q-P19-F midió que una
+     * mesa sin la opción sí: 16 de 16 observaron.
+     *
+     * El motivo viaja con el hecho porque quien lea este stream mañana necesita saber **por qué** esa
+     * opción no estaba, y no puede preguntárselo a nadie.
+     *
+     * ── CÓDIGO Y MENSAJE, NO PROSA SUELTA ───────────────────────────────────────────────────────
+     *
+     * El mensaje cambia —se reescribe, se traduce, se afina—; el código no. Una proyección que quiera
+     * agrupar, contar o traducir motivos tiene que poder hacerlo **sin parsear prosa**, y un stream se
+     * lee años después de escribirse: para entonces la frase de hoy puede no existir en ningún lado.
+     *
+     * Es la misma forma que la frontera ya usa (`reason_code`), y por la misma razón.
+     */
+    public function removeOption(string $id, string $option, string $code, ?string $message = null): void
+    {
+        $option = trim($option);
+        $code = trim($code);
+        if ($option === '' || $code === '') {
+            return;
+        }
+
+        $this->append($id, SessionEvent::OptionRemoved, [
+            'option' => $option,
+            'reason' => ['code' => $code, 'message' => $message],
+        ]);
+    }
+
     public function grant(string $id, string $operation): void
     {
         $this->append($id, SessionEvent::PermissionGranted, ['operation' => $operation]);

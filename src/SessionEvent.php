@@ -127,5 +127,24 @@ enum SessionEvent: string
     case TodosTransferred = 'session.todos_transferred';
 
     /** La sesión terminó, con el motivo por el que terminó. */
+    /**
+     * Una opción salió de la mesa de ESTA sesión.
+     *
+     * No es un mensaje: es una mutación del entorno. Q-P19-D/E midieron que una negativa no redirige
+     * —0 de 32 corridas volvieron a llamar una herramienta, ni cuando la negativa nombraba la
+     * alternativa— y Q-P19-F midió que un catálogo sin la opción sí: 16 de 16 observaron. Lo que
+     * mueve al operador no es lo que se le dice, es lo que hay en la mesa.
+     *
+     * Va al STREAM y no a un arreglo en memoria porque la mesa pertenece a la sesión: sin este hecho
+     * no sobreviviría a una compactación ni a retomar mañana, y sería la segunda copia que la spec del
+     * tablero prohíbe. Con él, «¿el agente releyó el mundo?» se lee comparando este hecho contra la
+     * llamada que vino después, en vez de inferirse.
+     *
+     * `option` y no `tool` a propósito: hoy la única manifestación medida es una herramienta, pero lo
+     * que desaparece es una posibilidad — mañana puede ser una ruta o una capacidad, y la doctrina no
+     * cambia. La generalización se implementa cuando haya un segundo caso, no antes (ADR-0037).
+     */
+    case OptionRemoved = 'session.option_removed';
+
     case Ended = 'session.ended';
 }

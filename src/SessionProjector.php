@@ -155,6 +155,21 @@ final readonly class SessionProjector
             // apertura, y el cierre de la ventana para contestar. Van explícitos y no en un `default`
             // para que agregar un evento nuevo obligue a decidir si se pinta — un `default`
             // silencioso haría que el siguiente hecho nazca invisible.
+            // LA MESA CAMBIÓ, y eso se pinta: una superficie que muestre lo que el agente puede hacer
+            // tiene que enterarse. El tablero lo ignora —no es una tarjeta— y una terminal puede
+            // decirlo; cada superficie filtra, como con `activity`.
+            SessionEvent::OptionRemoved => [
+                ...$base,
+                'kind' => 'option-removed',
+                'activity' => [
+                    'state' => 'option-removed',
+                    'detail' => \is_string($p['option'] ?? null) ? $p['option'] : null,
+                    // EL CÓDIGO va aparte del mensaje: una superficie agrupa por código y muestra el
+                    // mensaje, y ninguna tiene que leer prosa para saber de qué motivo se trata.
+                    'why' => \is_string($p['reason']['code'] ?? null) ? $p['reason']['code'] : null,
+                    'detailWhy' => \is_string($p['reason']['message'] ?? null) ? $p['reason']['message'] : null,
+                ],
+            ],
             SessionEvent::Started,
             SessionEvent::Compacted,
             SessionEvent::QuestionAnswered,

@@ -844,4 +844,46 @@ final class SessionStoreTest extends TestCase
 
         self::assertSame(0, $declarado->payload['todos'][0]['mutationsSince']);
     }
+
+    /**
+     * Una opcion retirada sale de la mesa de la sesion, y el motivo viaja con el hecho.
+     *
+     * Va al stream y no a un arreglo en memoria porque la mesa pertenece a la SESION: sin este hecho
+     * no sobreviviria a una compactacion ni a retomar manana. Y quien lea esto en un ano necesita
+     * saber por que esa opcion no estaba, sin poder preguntarle a nadie.
+     */
+    public function testARemovedOptionLeavesTheTableAndSaysWhy(): void
+    {
+        $eventos = new InMemoryEventStore();
+        $almacen = new SessionStore($eventos);
+        $almacen->start('s1', 'x');
+
+        $almacen->removeOption('s1', 'plugins_disable', 'request_reads_only', 'la peticion solo preguntaba');
+        $almacen->removeOption('s1', 'plugins_disable', 'request_reads_only');
+        $almacen->removeOption('s1', '  ', 'x');
+        // Sin CODIGO tampoco: un motivo que solo trae prosa no se puede agrupar ni contar, y un hecho
+        // sin motivo agrupable es el que nadie va a poder medir en un ano.
+        $almacen->removeOption('s1', 'plugins_lock', '  ');
+
+        self::assertSame(['plugins_disable'], $almacen->load('s1')?->removedOptions);
+
+        $hechos = array_values(array_filter(
+            $eventos->replay(SessionStore::PREFIX . 's1'),
+            static fn ($e): bool => $e->type === 'session.option_removed',
+        ));
+
+        self::assertCount(2, $hechos, 'los dos intentos quedan en la historia; el fold es el que no repite');
+        self::assertSame('request_reads_only', $hechos[0]->payload['reason']['code']);
+        self::assertSame('la peticion solo preguntaba', $hechos[0]->payload['reason']['message']);
+        self::assertNull($hechos[1]->payload['reason']['message'], 'el mensaje es opcional; el codigo no');
+    }
+
+    /** Y una sesion recien abierta no tiene nada retirado. */
+    public function testAFreshSessionHasNothingRemoved(): void
+    {
+        $almacen = new SessionStore(new InMemoryEventStore());
+        $almacen->start('s1', 'x');
+
+        self::assertSame([], $almacen->load('s1')?->removedOptions);
+    }
 }

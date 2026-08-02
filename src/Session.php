@@ -31,15 +31,20 @@ namespace Milpa\Agent;
 final readonly class Session
 {
     /**
-     * @param list<array{role: string, content: string, seq: int}>                                 $turns       la conversación completa,
-     *                                                                                                          en orden y con su secuencia
-     * @param list<Todo>                                                                           $todos
-     * @param list<string>                                                                         $permissions operaciones consentidas
-     *                                                                                                          para esta sesión
-     * @param list<array{question: string, answer: string, by?: Principal|null, expired?: string}> $decisions   lo que el humano
-     *                                                                                                          resolvió cuando la
-     *                                                                                                          sesión se detuvo a
-     *                                                                                                          preguntar
+     * @param list<array{role: string, content: string, seq: int}>                                                                                                  $turns       la conversación completa,
+     *                                                                                                                                                                           en orden y con su secuencia
+     * @param list<Todo>                                                                                                                                            $todos
+     * @param list<string>                                                                                                                                          $permissions operaciones consentidas
+     *                                                                                                                                                                           para esta sesión
+     * @param list<array{question: string, answer: string, by?: Principal|null, executor?: string|null, reason?: string|null, why?: string|null, expired?: string}> $decisions   lo que el humano
+     *                                                                                                                                                                           resolvió cuando la
+     *                                                                                                                                                                           sesión se detuvo a
+     *                                                                                                                                                                           preguntar — con el
+     *                                                                                                                                                                           motivo y el objeto de
+     *                                                                                                                                                                           la pregunta, para que
+     *                                                                                                                                                                           una confirmación se
+     *                                                                                                                                                                           pueda consumir sin
+     *                                                                                                                                                                           parsear prosa
      */
     public function __construct(
         public string $id,
@@ -73,6 +78,8 @@ final readonly class Session
         public int $mutations = 0,
         public array $todos = [],
         public array $permissions = [],
+        /** @var list<string> opciones retiradas de la mesa de esta sesión */
+        public array $removedOptions = [],
         public ?string $summary = null,
         public int $compactedThrough = 0,
         public ?PendingQuestion $question = null,

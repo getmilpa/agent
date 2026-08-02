@@ -146,6 +146,17 @@ Replay never raises trust: anything that does not explicitly say `verified: true
 And `null` — nobody said who — stays `null`; sessions recorded before this existed are not given an
 invented principal.
 
+## Why a question was asked — as a code
+
+Since 0.4 a `PendingQuestion` carries `reason`: a stable code (`permission`, `signature`,
+`target_not_named`) next to the human-readable text. The text gets rewritten and translated; the
+code does not — a projection counting how many pauses each authority produced must never parse
+prose. And when a question is answered, the resulting decision **inherits** `reason` and `why` from
+the question that produced it, so a confirmation can be consumed as data: "this operation, over this
+target, was confirmed by the human" is readable from the fact alone. That is what closes the loop —
+a *yes* to "did you mean HelloPlugin?" names the target, the retry passes, and a yes to one target
+names no other.
+
 ## Compaction
 
 When a session outgrows its window, `Compactor` appends a summary of the old turns and keeps the
