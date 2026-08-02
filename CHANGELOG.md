@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/getmilpa/agent/compare/v0.2.2...v0.3.0) (2026-08-02)
+
+
+### Features
+
+* activity is a projection, not a gap ([27f64a8](https://github.com/getmilpa/agent/commit/27f64a8ab932e40ae41eaa577416e9275d4c4e6e))
+
 ## [0.2.2](https://github.com/getmilpa/agent/compare/v0.2.1...v0.2.2) (2026-08-01)
 
 
