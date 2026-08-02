@@ -51,7 +51,7 @@ final readonly class SessionProjector
      * Un turno del modelo importa en la conversación y no en el tablero, y forzarlo a producir algo
      * llenaría la superficie de ruido que nadie pidió.
      *
-     * @return array{session: string, kind: string, at: int, card?: array<string, mixed>, plan?: array<string, mixed>, ended?: array<string, mixed>}|null
+     * @return array{session: string, kind: string, at: int, card?: array<string, mixed>, plan?: array<string, mixed>, ended?: array<string, mixed>, activity?: array<string, mixed>}|null
      */
     public function project(Event $event): ?array
     {
@@ -119,13 +119,43 @@ final readonly class SessionProjector
                 'kind' => 'waiting',
                 'ended' => ['question' => \is_string($p['question'] ?? null) ? $p['question'] : ''],
             ],
-            // Lo que no cambia lo que se ve: turnos, llamadas, permisos, compactación, respuestas,
-            // cambios de modo, apertura, y el cierre de la ventana para contestar. Van explícitos y
-            // no en un `default` para que agregar un evento nuevo obligue a decidir si se pinta —
-            // un `default` silencioso haría que el siguiente hecho nazca invisible.
+            // ── ACTIVIDAD: EN QUÉ ESTÁ LA SESIÓN AHORA MISMO ───────────────────────────────
+            //
+            // Un turno y una llamada a herramienta no cambian el TABLERO —ninguna tarjeta se mueve—
+            // pero sí cambian lo que una pantalla tiene que estar diciendo mientras se espera. La
+            // primera versión de este proyector los mandaba a `null` porque el tablero no los pinta,
+            // y ahí estaba el error: **«el tablero no lo pinta» no es «no es proyectable»**.
+            //
+            // Se proyectan una vez y cada superficie filtra lo que le sirve. La alternativa —una
+            // segunda traducción para la actividad— sería la copia que esta clase existe para no
+            // tener: dos lecturas del mismo stream que divergen en el evento que nadie probó.
+            SessionEvent::Turn => [
+                ...$base,
+                'kind' => 'activity',
+                'activity' => [
+                    // `user` significa que la pregunta ya está guardada y el modelo tiene la palabra;
+                    // `assistant`, que contestó. Son los dos extremos de la espera.
+                    'state' => \is_string($p['role'] ?? null) && $p['role'] === 'assistant' ? 'ready' : 'thinking',
+                    'detail' => null,
+                ],
+            ],
+            SessionEvent::ToolCalled => [
+                ...$base,
+                'kind' => 'activity',
+                'activity' => [
+                    'state' => 'tool',
+                    // EL NOMBRE, que es lo que hace observable que algo pasa: un texto fijo durante
+                    // dieciséis segundos no distingue trabajo de cuelgue; un nombre que cambia sí.
+                    'detail' => \is_string($p['tool'] ?? null) ? $p['tool'] : null,
+                    'mutating' => ($p['mutating'] ?? false) === true,
+                    'ok' => ($p['ok'] ?? true) === true,
+                ],
+            ],
+            // Lo que no cambia lo que se ve: permisos, compactación, respuestas, cambios de modo,
+            // apertura, y el cierre de la ventana para contestar. Van explícitos y no en un `default`
+            // para que agregar un evento nuevo obligue a decidir si se pinta — un `default`
+            // silencioso haría que el siguiente hecho nazca invisible.
             SessionEvent::Started,
-            SessionEvent::Turn,
-            SessionEvent::ToolCalled,
             SessionEvent::Compacted,
             SessionEvent::QuestionAnswered,
             SessionEvent::AnswerWindowClosed,

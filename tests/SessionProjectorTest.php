@@ -14,6 +14,7 @@ declare(strict_types=1);
 
 namespace Milpa\Agent\Tests;
 
+use Milpa\Agent\AutonomyMode;
 use Milpa\Agent\SessionProjector;
 use Milpa\Agent\SessionStore;
 use Milpa\Agent\Todo;
@@ -67,12 +68,44 @@ final class SessionProjectorTest extends TestCase
         $eventos = new InMemoryEventStore();
         $almacen = new SessionStore($eventos);
         $almacen->start('s1', 'x');
-        $almacen->recordTurn('s1', 'user', 'hola');
-        $almacen->recordToolCall('s1', 'plugins_list', [], 'ok');
+        $almacen->grant('s1', 'plugins.disable');
+        $almacen->setMode('s1', AutonomyMode::Auto);
 
         $pintables = (new SessionProjector())->projectAll($eventos->replay('agent-session:s1'));
 
-        self::assertSame([], $pintables, 'abrir, hablar y consultar no pintan nada');
+        self::assertSame([], $pintables, 'abrir, permitir y cambiar de modo no pintan nada');
+    }
+
+    /**
+     * Hablar y llamar herramientas SÍ proyectan: son la actividad.
+     *
+     * No mueven una tarjeta —el tablero no los pinta— pero son exactamente lo que una pantalla tiene
+     * que estar diciendo mientras se espera. «El tablero no lo pinta» no es «no es proyectable»: se
+     * proyecta una vez y cada superficie filtra, porque dos traducciones del mismo stream divergen en
+     * el evento que nadie probó.
+     */
+    public function testTalkingAndCallingToolsProjectActivity(): void
+    {
+        $eventos = new InMemoryEventStore();
+        $almacen = new SessionStore($eventos);
+        $almacen->start('s1', 'x');
+        $almacen->recordTurn('s1', 'user', 'hola');
+        $almacen->recordToolCall('s1', 'plugins_list', [], 'ok');
+        $almacen->recordToolCall('s1', 'make', [], 'ok', true, true);
+        $almacen->recordTurn('s1', 'assistant', 'listo');
+
+        $actividad = array_values(array_filter(
+            (new SessionProjector())->projectAll($eventos->replay('agent-session:s1')),
+            static fn (array $p): bool => $p['kind'] === 'activity',
+        ));
+
+        self::assertCount(4, $actividad);
+        self::assertSame('thinking', $actividad[0]['activity']['state'], 'la pregunta ya está guardada: el modelo tiene la palabra');
+        self::assertSame('tool', $actividad[1]['activity']['state']);
+        self::assertSame('plugins_list', $actividad[1]['activity']['detail'], 'el nombre es lo que hace observable que algo pasa');
+        self::assertFalse($actividad[1]['activity']['mutating']);
+        self::assertTrue($actividad[2]['activity']['mutating'], 'y se distingue la que toca algo');
+        self::assertSame('ready', $actividad[3]['activity']['state']);
     }
 
     /** El plan proyecta su linaje: qué versión es y a cuál reemplaza. */
