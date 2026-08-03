@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/getmilpa/agent/compare/v0.4.0...v0.5.0) (2026-08-03)
+
+
+### Features
+
+* la proyección de una herramienta llamada lleva su resultado ([f9d04e7](https://github.com/getmilpa/agent/commit/f9d04e70e72c7b0878cf0183c5dd173d89bf1789))
+
 ## [0.4.0](https://github.com/getmilpa/agent/compare/v0.3.0...v0.4.0) (2026-08-02)
 
 
