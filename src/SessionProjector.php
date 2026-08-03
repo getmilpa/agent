@@ -149,6 +149,15 @@ final readonly class SessionProjector
                     'detail' => \is_string($p['tool'] ?? null) ? $p['tool'] : null,
                     'mutating' => ($p['mutating'] ?? false) === true,
                     'ok' => ($p['ok'] ?? true) === true,
+                    // LO QUE LA HERRAMIENTA CONTESTÓ, para que una superficie pueda ARMAR la vista
+                    // del dato en vez de enseñar la transcripción que el modelo hizo de él.
+                    //
+                    // Va por aquí y no por una segunda lectura del stream: esta clase es la única
+                    // traducción, y dos lecturas del mismo evento divergen en el caso que nadie
+                    // probó. Viaja tal cual quedó guardado —recortado por quien lo guardó— así que
+                    // quien lo consuma tiene que tolerar que no parsee: un resultado a medias es un
+                    // texto, no una tabla, y fingir lo contrario sería inventar filas.
+                    'result' => \is_string($p['result'] ?? null) ? $p['result'] : null,
                 ],
             ],
             // Lo que no cambia lo que se ve: permisos, compactación, respuestas, cambios de modo,
