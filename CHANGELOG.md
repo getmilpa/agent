@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.1](https://github.com/getmilpa/agent/compare/v0.5.0...v0.5.1) (2026-08-04)
+
+
+### Bug Fixes
+
+* **composer:** declarar type milpa-capability para que el paquete sea descubrible por lo que es ([d9943cc](https://github.com/getmilpa/agent/commit/d9943cccbfc9eed323a2baa501a8b896df8ec1a3))
+
 ## [0.5.0](https://github.com/getmilpa/agent/compare/v0.4.0...v0.5.0) (2026-08-03)
 
 
