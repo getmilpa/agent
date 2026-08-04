@@ -11,7 +11,7 @@
     "event-sourcing",
     "coding-agent"
   ],
-  "type": "library",
+  "type": "milpa-capability",
   "license": "Apache-2.0",
   "authors": [
     {

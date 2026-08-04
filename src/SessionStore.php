@@ -356,12 +356,6 @@ final readonly class SessionStore
     }
 
     /**
-     * Consiente una operación para el resto de esta sesión (P16.5).
-     *
-     * Por operación y por sesión, nunca global: «sí a `make`, en esta sesión» es una frase que alguien
-     * puede evaluar. «Sí a lo que el agente decida» no lo es.
-     */
-    /**
      * Retirar una opción de la mesa de esta sesión.
      *
      * Se llama cuando una autoridad ya negó esa llamada: la negativa deja de ser un mensaje y pasa a
@@ -394,6 +388,12 @@ final readonly class SessionStore
         ]);
     }
 
+    /**
+     * Consiente una operación para el resto de esta sesión (P16.5).
+     *
+     * Por operación y por sesión, nunca global: «sí a `make`, en esta sesión» es una frase que alguien
+     * puede evaluar. «Sí a lo que el agente decida» no lo es.
+     */
     public function grant(string $id, string $operation): void
     {
         $this->append($id, SessionEvent::PermissionGranted, ['operation' => $operation]);
