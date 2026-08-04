@@ -57,7 +57,10 @@
         "provides": [
           "agent.sessions"
         ],
-        "briefing": "This app stores agent sessions: you can pause, ask for permission, and have someone answer later."
+        "briefing": "This app stores agent sessions: you can pause, ask for permission, and have someone answer later.",
+        "contracts": {
+          "agent.sessions": "Milpa\\Agent\\SessionStore"
+        }
       }
     }
   }
