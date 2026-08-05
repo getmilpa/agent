@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/getmilpa/agent/compare/v0.5.2...v0.6.0) (2026-08-05)
+
+
+### Features
+
+* **channel:** un mensaje entre sesiones del mismo árbol, como evento del stream ([44275db](https://github.com/getmilpa/agent/commit/44275db6e2feb469ac2ac6acb9c3789960df4eb7))
+
 ## [0.5.2](https://github.com/getmilpa/agent/compare/v0.5.1...v0.5.2) (2026-08-04)
 
 
