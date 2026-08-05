@@ -139,6 +139,19 @@ final readonly class SessionProjector
                     'detail' => null,
                 ],
             ],
+            // A MESSAGE IS ITS OWN KIND, not an activity turn.
+            //
+            // Folding it into `activity` would tell a surface «the model is thinking» when what
+            // actually happened is that somebody in the tree said something — and the sender would be
+            // lost, which is the one detail a reader needs to tell a correction from an answer.
+            SessionEvent::MessageSent => [
+                ...$base,
+                'kind' => 'message',
+                'message' => [
+                    'from' => \is_string($p['from'] ?? null) ? $p['from'] : '(unknown)',
+                    'content' => \is_string($p['content'] ?? null) ? $p['content'] : '',
+                ],
+            ],
             SessionEvent::ToolCalled => [
                 ...$base,
                 'kind' => 'activity',

@@ -194,6 +194,38 @@ final readonly class SessionStore
      * mandárselos al modelo. Reemplazarlos ahorraría bytes y destruiría la evidencia de cómo se llegó
      * a donde se llegó — en las sesiones largas, que son las únicas que se compactan.
      */
+    /**
+     * A message from one session to another in the same tree. It lands in the RECIPIENT's stream.
+     *
+     * ── WHY THE RECIPIENT'S ─────────────────────────────────────────────────────────────────────
+     *
+     * Because that is where it has to reach the model's window: a message living in the sender's
+     * stream would be a private note the recipient never reads. And because the child may be paused
+     * or running at another moment — the event waits; a variable does not.
+     *
+     * ── WHAT THIS METHOD DOES NOT CHECK, AND WHO DOES ───────────────────────────────────────────
+     *
+     * FILIATION. It does not verify that `$from` and `$to` belong to the same tree, and that is not
+     * an oversight: this store is the scribe, not the authority. Whoever decides if one session may
+     * talk to another is the operation that offers it — the one that sees the lineage and can refuse
+     * with a reason. Putting it here would give the scribe a policy, and a policy in the scribe is a
+     * policy nobody can substitute.
+     *
+     * What IS invariant, and lives in the name for that reason: a message carries INFORMATION. It
+     * grants no permission, raises no ceiling, answers no pending question and closes nothing — that
+     * is `grant`, `setMode`, `answer` and `end`, each with its own contract.
+     */
+    public function message(string $to, string $from, string $content): void
+    {
+        $this->append($to, SessionEvent::MessageSent, ['from' => $from, 'content' => $content]);
+    }
+
+    /**
+     * Resume lo que ya pasó hasta `$throughSeq`, para que la ventana quepa sin perder el hilo.
+     *
+     * No borra nada: el stream sigue completo y el resumen es un evento más. Compactar es una
+     * decisión sobre qué se le ENSEÑA al modelo, nunca sobre qué se guarda.
+     */
     public function compact(string $id, string $summary, int $throughSeq): void
     {
         $this->append($id, SessionEvent::Compacted, ['summary' => $summary, 'through' => $throughSeq]);

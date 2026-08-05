@@ -89,6 +89,25 @@ final readonly class SessionReducer
                     'content' => \is_string($p['content'] ?? null) ? $p['content'] : '',
                     'seq' => $evento->seq,
                 ],
+                // A MESSAGE ENTERS THE CONVERSATION AS `user`, with the sender inside the text.
+                //
+                // As `user` because to the recipient it is somebody outside telling it something —
+                // the same category as its brief. And the sender travels INSIDE the content rather
+                // than in a separate field because the model reads content: a `from` that only
+                // existed on the event would be auditable and invisible to whoever has to act.
+                //
+                // It carries `■`, the visual language's system marker, so anyone looking at the
+                // screen tells a message from the tree apart from something the model wrote. The
+                // model cannot fabricate it: this reduction places it from where the event came.
+                SessionEvent::MessageSent => $turnos[] = [
+                    'role' => 'user',
+                    'content' => sprintf(
+                        '■ mensaje de «%s»: %s',
+                        \is_string($p['from'] ?? null) ? $p['from'] : '(desconocido)',
+                        \is_string($p['content'] ?? null) ? $p['content'] : '',
+                    ),
+                    'seq' => $evento->seq,
+                ],
                 // Una llamada a herramienta es parte de la conversación que el modelo tiene que ver:
                 // sin ella, retomar una sesión sería retomarla sin saber qué ya se intentó, y el
                 // agente repetiría el trabajo que su yo anterior ya hizo.

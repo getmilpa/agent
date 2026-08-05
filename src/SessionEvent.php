@@ -40,6 +40,31 @@ enum SessionEvent: string
     case ToolCalled = 'session.tool_called';
 
     /**
+     * A message between two sessions of the same tree — parent to child, or child to parent.
+     *
+     * ── WHY AN EVENT AND NOT A VARIABLE ─────────────────────────────────────────────────────────
+     *
+     * Because the channel is BIDIRECTIONAL and the two sessions live in processes that need not
+     * overlap in time: a parent corrects a child that paused yesterday, a child says something while
+     * the parent is waiting. A variable requires both to be alive at once; an event does not.
+     *
+     * And because it stays auditable: «the parent told it to look elsewhere» is a fact of the stream,
+     * with its order and its sender, rather than somebody's claim afterwards.
+     *
+     * ── WHAT A MESSAGE CANNOT DO, WHICH IS HALF THE CONTRACT ────────────────────────────────────
+     *
+     * **A message carries information, never authority.** It grants no permission, does not raise the
+     * autonomy ceiling, does not answer a pending question and does not close a session. Each of
+     * those has its own operation with its own contract, and the last three are kept out of the
+     * agent's catalogue on purpose (Q-P19-M).
+     *
+     * Without that rule a parent could write «you may write files now» and the lineage ceiling would
+     * become a suggestion — the cheapest authority laundering there is, precisely because it travels
+     * through a channel that looks harmless.
+     */
+    case MessageSent = 'session.message_sent';
+
+    /**
      * Se resumió lo viejo (P16.2).
      *
      * Apenda el resumen y hasta qué secuencia cubre; los turnos que resume siguen en el stream. Lo
