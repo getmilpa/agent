@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/getmilpa/agent/compare/v0.6.0...v0.7.0) (2026-08-06)
+
+
+### Features
+
+* cards carry lineage and answering projects — the board's source becomes fully legible ([6ff38bd](https://github.com/getmilpa/agent/commit/6ff38bdebb15e297da275385d71dd1230da37b24))
+
 ## [0.6.0](https://github.com/getmilpa/agent/compare/v0.5.2...v0.6.0) (2026-08-05)
 
 
