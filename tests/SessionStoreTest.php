@@ -886,4 +886,149 @@ final class SessionStoreTest extends TestCase
 
         self::assertSame([], $almacen->load('s1')?->removedOptions);
     }
+
+    /**
+     * AN OBLIGATION THAT WAS MET STOPS BEING ONE.
+     *
+     * Without this the prerequisite re-arms on every turn: a session resumed after a pause plans
+     * again, and again, and a real run produced six identical cards for one task — twenty pending
+     * for six. «Plan before starting» meant once, not once per turn, and a board painted on the
+     * second reading is noisy where the empty one was mute. Neither is a source anyone can trust.
+     */
+    public function testAnObligationAlreadyMetDoesNotSurviveIntoTheNextTurn(): void
+    {
+        $almacen = $this->store();
+        $almacen->start('s', 'construye algo largo', AutonomyMode::Auto);
+
+        $almacen->requireFirst('s', ['plan']);
+        self::assertSame(['plan'], $almacen->load('s')?->runFirst, 'declarada, la obligación rige');
+
+        $almacen->setPlan('s', 'primero esto, luego lo otro');
+        self::assertSame([], $almacen->load('s')?->runFirst, 'cumplida, deja de regir — y no se re-arma al retomar');
+
+        // Y VUELVE si alguien con autoridad la vuelve a declarar: quitarla no es perderla.
+        $almacen->requireFirst('s', ['plan']);
+        self::assertSame(['plan'], $almacen->load('s')?->runFirst);
+
+        // Una lista vacía la levanta, que es la misma autoridad deshaciendo lo que hizo.
+        $almacen->requireFirst('s', []);
+        self::assertSame([], $almacen->load('s')?->runFirst);
+    }
+
+    /**
+     * RENEWAL BELONGS TO THE SESSION SOMEBODY SET UP THAT WAY — never to the app around it.
+     *
+     * It lived in `config/app.php` for exactly one measured run, and that run was thrown away: an
+     * app-level flag reaches BOTH arms of an experiment inside that app, so the arm meant to receive
+     * nothing started organising too and stopped being a control. A control that receives the
+     * treatment measures nothing.
+     */
+    public function testOnlyASessionGivenAnObligationIsEverRenewed(): void
+    {
+        $almacen = $this->store();
+
+        $almacen->start('suelta', 'trabaja', AutonomyMode::Auto);
+        self::assertFalse($almacen->load('suelta')?->obligationDeclared, 'una sesión que nadie obligó no se renueva jamás');
+
+        $almacen->start('exigida', 'trabaja', AutonomyMode::Auto);
+        $almacen->requireFirst('exigida', ['plan']);
+        self::assertTrue($almacen->load('exigida')?->obligationDeclared);
+
+        // Y SIGUE SIENDO CIERTO DESPUÉS DE CUMPLIRSE: `runFirst` se vacía al correr el plan, pero
+        // haber sido obligada es un hecho del pasado de esta sesión y no se deshace.
+        $almacen->setPlan('exigida', 'un plan');
+        self::assertSame([], $almacen->load('exigida')?->runFirst);
+        self::assertTrue($almacen->load('exigida')?->obligationDeclared, 'cumplir no borra haber sido obligada');
+    }
+
+    /**
+     * EVERY CARD CARRIES THE PLAN GENERATION IT BELONGS TO.
+     *
+     * Re-planning is what completes long work — Q-P17-L measured 6/9 against 0/9 — and it is also
+     * what stacked six copies of the same card, twenty pending for six real tasks. Benefit and noise
+     * came out of the same act, so they get separated where the spec says the board lives: in the
+     * reading. Nothing is retired here; the copies happened and stay. What the stamp buys is that a
+     * surface can tell which generation is today's.
+     */
+    public function testEveryCardCarriesThePlanGenerationItBelongsTo(): void
+    {
+        $events = new InMemoryEventStore();
+        $store = new SessionStore($events);
+        $store->start('s', 'trabaja', AutonomyMode::Auto);
+
+        $store->setPlan('s', 'primera versión');
+        $store->setTodo('s', new Todo('t1', 'hacer lo primero', TodoStatus::Pending));
+
+        // Re-planear abre una generación: la tarjeta de antes NO cambia, la nueva nace en la otra.
+        $store->setPlan('s', 'segunda versión');
+        $store->setTodo('s', new Todo('t2', 'hacer lo segundo', TodoStatus::Pending));
+
+        $generations = [];
+        foreach ($events->replay('agent-session:s') as $event) {
+            if ($event->type === 'session.todo_changed') {
+                $generations[$event->payload['id']] = $event->payload['planVersion'] ?? null;
+            }
+        }
+
+        self::assertSame(1, $generations['t1'], 'la tarjeta del primer plan queda sellada con su generación');
+        self::assertSame(2, $generations['t2'], 'la del segundo nace en la siguiente');
+    }
+
+    /**
+     * A CARD SAYS WHICH ONE IT REPLACED, and the record keeps both.
+     *
+     * Plan generations could not answer this: the stamp records when a card was last touched, so one
+     * moved after a re-plan migrates forward and survives any version compare — verified, seven
+     * generations removing seven cards in one run and none in the other. Whether two cards speak
+     * about the same task is not derivable without guessing what the agent meant, so it is declared.
+     *
+     * Neither card is destroyed: the replaced one stays exactly as it was, and the new one carries
+     * the link. A surface decides what to show; the stream keeps what happened.
+     */
+    public function testACardRecordsWhichOneItReplaced(): void
+    {
+        $store = $this->store();
+        $store->start('s', 'trabaja', AutonomyMode::Auto);
+
+        $store->setTodo('s', new Todo('t1', 'registrar los plugins', TodoStatus::Pending));
+        $store->setTodo('s', new Todo('t2', 'registrar los TRES plugins', TodoStatus::Pending, replaces: 't1'));
+
+        $porId = [];
+        foreach ($store->load('s')?->todos ?? [] as $t) {
+            $porId[$t->id] = $t;
+        }
+
+        self::assertArrayHasKey('t2', $porId);
+        self::assertNull($porId['t1']->replaces, 'la vieja no se toca');
+        self::assertSame('t1', $porId['t2']->replaces, 'la nueva dice a cuál deja sin efecto');
+        self::assertSame(TodoStatus::Pending, $porId['t1']->status, 'reemplazar no es cerrar: la reemplazada no se marca hecha ni abandonada');
+    }
+
+    /**
+     * THE BIRTH GENERATION IS FIXED ONCE AND NEVER MOVES AGAIN.
+     *
+     * `planVersion` records the last touch — right for «how current is this», wrong for «is this a
+     * restatement of that»: a card moved after a re-plan migrates forward and stops being comparable
+     * with the one it duplicates. Three slices in a row were built on the touch stamp before the
+     * measurement showed all three were reading the wrong moment.
+     */
+    public function testTheBirthGenerationNeverMovesWhileTheTouchStampDoes(): void
+    {
+        $store = $this->store();
+        $store->start('s', 'trabaja', AutonomyMode::Auto);
+
+        $store->setPlan('s', 'primera versión');
+        $store->setTodo('s', new Todo('t1', 'registrar', TodoStatus::Pending));
+
+        $store->setPlan('s', 'segunda versión');
+        $store->setTodo('s', new Todo('t1', 'registrar', TodoStatus::InProgress));
+
+        $porId = [];
+        foreach ($store->load('s')?->todos ?? [] as $t) {
+            $porId[$t->id] = $t;
+        }
+
+        self::assertSame(1, $porId['t1']->bornInPlan, 'nació en la primera y ahí se queda');
+        self::assertSame(2, $porId['t1']->planVersion, 'el último toque sí avanza');
+    }
 }

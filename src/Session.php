@@ -87,6 +87,18 @@ final readonly class Session
         // borraran, volvería a preguntarlas o —peor— volvería a suponerlas.
         public array $decisions = [],
         public ?string $endedBecause = null,
+        /** @var list<string> tools that must run before any other call proceeds */
+        public array $runFirst = [],
+        /**
+         * Whether this session was EVER given a standing obligation.
+         *
+         * Distinct from `$runFirst`, which empties as soon as the obligation is met. Renewing a
+         * discipline across resumed turns is a property of the session somebody set up that way —
+         * not of the app it happens to run in, which is where it lived first and where it could not
+         * be measured: an app-level flag reaches both arms of any experiment inside that app, so the
+         * control receives the treatment and stops being a control.
+         */
+        public bool $obligationDeclared = false,
     ) {
     }
 

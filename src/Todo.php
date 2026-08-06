@@ -41,6 +41,29 @@ final readonly class Todo
         // telemetría: es lo que permite preguntar, al cerrar, cuántas cosas cambiaron desde entonces
         // sin que nadie tocara esta tarjeta.
         public int $mutationsAt = 0,
+        // WHICH GENERATION OF THE PLAN THIS CARD BELONGS TO. Zero on cards written before the stamp
+        // existed, and that reads as «unknown generation» rather than as «the first» — a surface
+        // showing them as current would be doing the very thing the stamp exists to stop.
+        public int $planVersion = 0,
+        // WHICH CARD THIS ONE REPLACED, declared by whoever wrote it and never guessed.
+        //
+        // Re-planning is what completes long work and it is also what stacked six copies of the same
+        // task. Comparing plan generations could not tell «superseded» from «still open from an
+        // earlier generation» — that needs knowing two cards speak about the same thing, and only
+        // whoever wrote the second one knows it.
+        //
+        // NOT a status and not a disposition: the replaced card was neither done nor abandoned. It
+        // was reformulated, and the record says by which.
+        public ?string $replaces = null,
+        // THE GENERATION THIS CARD WAS BORN IN, and it never moves again.
+        //
+        // `planVersion` records the LAST TOUCH, which is the right question for «how current is this»
+        // and the wrong one for «is this a restatement of that»: a card moved after a re-plan
+        // migrates forward and stops being comparable with the one it duplicates. Three slices in a
+        // row were built on the touch stamp and all three read the wrong moment.
+        //
+        // Both are kept because both are true, and each answers what it was asked.
+        public int $bornInPlan = 0,
     ) {
     }
 
@@ -66,6 +89,8 @@ final readonly class Todo
             'id' => $this->id,
             'text' => $this->text,
             'status' => $this->status->value,
+            'replaces' => $this->replaces,
+            'bornInPlan' => $this->bornInPlan,
             'version' => $this->version,
             'origin' => $this->origin?->value,
             'mutationsAt' => $this->mutationsAt,
@@ -92,6 +117,9 @@ final readonly class Todo
             \is_int($row['version'] ?? null) ? $row['version'] : 1,
             TodoOrigin::tryFrom(\is_string($row['origin'] ?? null) ? $row['origin'] : ''),
             \is_int($row['mutationsAt'] ?? null) ? $row['mutationsAt'] : 0,
+            \is_int($row['planVersion'] ?? null) ? $row['planVersion'] : 0,
+            \is_string($row['replaces'] ?? null) && $row['replaces'] !== '' ? $row['replaces'] : null,
+            \is_int($row['bornInPlan'] ?? null) ? $row['bornInPlan'] : 0,
         );
     }
 }

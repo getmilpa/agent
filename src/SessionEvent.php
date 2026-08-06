@@ -171,5 +171,20 @@ enum SessionEvent: string
      */
     case OptionRemoved = 'session.option_removed';
 
+    /**
+     * An ordering obligation that outlives the turn.
+     *
+     * `--first` used to govern only the invocation that carried it, so a session resumed after a
+     * pause came back with the obligation gone — and the thing it was ordering (write the plan
+     * before touching anything) is exactly the thing a long session needs to keep doing. Measured in
+     * Q-P17-L: with the obligation, 21 plans and 14 cards moved; without it, zero of both and zero
+     * work finished.
+     *
+     * It is a fact of the session and not a flag of the caller, for the same reason a withdrawn
+     * option is: rebuilding it from whoever happened to type the command would make the table change
+     * depending on who resumed.
+     */
+    case PrerequisiteSet = 'session.prerequisite_set';
+
     case Ended = 'session.ended';
 }

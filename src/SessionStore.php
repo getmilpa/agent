@@ -221,10 +221,10 @@ final readonly class SessionStore
     }
 
     /**
-     * Resume lo que ya pasó hasta `$throughSeq`, para que la ventana quepa sin perder el hilo.
+     * Summarises what happened up to `$throughSeq`, so the window fits without losing the thread.
      *
-     * No borra nada: el stream sigue completo y el resumen es un evento más. Compactar es una
-     * decisión sobre qué se le ENSEÑA al modelo, nunca sobre qué se guarda.
+     * It deletes nothing: the stream stays whole and the summary is one more event. Compacting is a
+     * decision about what the model is SHOWN, never about what is kept.
      */
     public function compact(string $id, string $summary, int $throughSeq): void
     {
@@ -276,9 +276,9 @@ final readonly class SessionStore
      */
     public function setTodo(string $id, Todo $todo): void
     {
-        $sesion = $this->load($id);
+        $session = $this->load($id);
         $previo = null;
-        foreach ($sesion instanceof Session ? $sesion->todos : [] as $t) {
+        foreach ($session instanceof Session ? $session->todos : [] as $t) {
             if ($t->id === $todo->id) {
                 $previo = $t;
 
@@ -297,13 +297,30 @@ final readonly class SessionStore
             // CUÁNTAS MUTACIONES LLEVABA LA SESIÓN cuando esta tarjeta se tocó por última vez. Es el
             // dato que permite preguntar después, sin cooperación de nadie: ¿cuántas cosas cambiaron
             // en el mundo desde que nadie mira esta tarjeta?
-            'mutationsAt' => $sesion instanceof Session ? $sesion->mutations : 0,
+            'mutationsAt' => $session instanceof Session ? $session->mutations : 0,
             // CÓMO NACIÓ, derivado y no preguntado. Sólo al nacer: un movimiento posterior no tiene
             // origen, tiene un `from` — y ponerle uno sería reescribir cómo apareció cada vez que se
             // mueve ({@see TodoOrigin}).
             'origin' => $previo === null
-                ? TodoOrigin::derive($todo->status, $sesion instanceof Session ? $sesion->toolCalls : 0)->value
+                ? TodoOrigin::derive($todo->status, $session instanceof Session ? $session->toolCalls : 0)->value
                 : null,
+            // WHICH GENERATION OF THE PLAN THIS CARD BELONGS TO.
+            //
+            // Without the stamp, re-planning stacks generations and every one of them reads as
+            // today's state: measured on a real session, TWENTY pending cards for SIX tasks, six
+            // copies of the same one. And re-planning is precisely what completes long work
+            // (Q-P17-L: 6/9 against 0/9), so benefit and noise came out of the same act.
+            //
+            // It STAMPS and retires nothing: the six copies happened and they stay. What stops
+            // happening is all six being presented as current — and that is fixed where the board
+            // spec already says everything lives: «the board holds no state; what you see is the
+            // fold of the stream».
+            'planVersion' => $session instanceof Session ? $session->planVersion : 0,
+            // AND THE BIRTH ONE, fixed once and never touched again — the same treatment `origin`
+            // gets. Without it there is no way to ask whether two cards are one task restated.
+            'bornInPlan' => $previo === null
+                ? ($session instanceof Session ? $session->planVersion : 0)
+                : $previo->bornInPlan,
             // A qué versión de ESTA tarjeta reemplaza. `null` al nacer: no reemplaza a nadie.
             'supersedes' => $cambio && $previo !== null ? $previo->version : null,
             // DE DÓNDE VIENE. Es el dato que el tablero necesita para pintar un movimiento y el que
@@ -418,6 +435,26 @@ final readonly class SessionStore
             'option' => $option,
             'reason' => ['code' => $code, 'message' => $message],
         ]);
+    }
+
+    /**
+     * Declare what must run before anything else, for the rest of this session.
+     *
+     * An empty list lifts it: the same authority that set the obligation has to be able to unset it,
+     * and without that the only way out would be opening another session.
+     *
+     * @param list<string> $tools
+     */
+    public function requireFirst(string $id, array $tools): void
+    {
+        $limpias = [];
+        foreach ($tools as $t) {
+            if (trim($t) !== '') {
+                $limpias[] = trim($t);
+            }
+        }
+
+        $this->append($id, SessionEvent::PrerequisiteSet, ['tools' => $limpias]);
     }
 
     /**

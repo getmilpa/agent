@@ -51,7 +51,7 @@ final readonly class SessionProjector
      * Un turno del modelo importa en la conversación y no en el tablero, y forzarlo a producir algo
      * llenaría la superficie de ruido que nadie pidió.
      *
-     * @return array{session: string, kind: string, at: int, card?: array<string, mixed>, plan?: array<string, mixed>, ended?: array<string, mixed>, activity?: array<string, mixed>}|null
+     * @return array{session: string, kind: string, at: int, card?: array<string, mixed>, plan?: array<string, mixed>, ended?: array<string, mixed>, activity?: array<string, mixed>, message?: array<string, mixed>, answered?: array<string, mixed>}|null
      */
     public function project(Event $event): ?array
     {
@@ -119,6 +119,24 @@ final readonly class SessionProjector
                 'kind' => 'waiting',
                 'ended' => ['question' => \is_string($p['question'] ?? null) ? $p['question'] : ''],
             ],
+            // ANSWERING PROJECTS: it is what clears the waiting banner. This event translated to
+            // `null` — «does not change what you see» — and that was false for the board: a surface
+            // showing the question kept showing it until the NEXT event arrived, so an answer
+            // without a resumption left an already-answered question on screen. Found watching a
+            // real session with the page open, not reading this file.
+            //
+            // The attribution travels whole and untouched: actor and executor are two identities,
+            // both already in the fact, and a surface that wants to say WHO answered must not have
+            // to re-derive it.
+            SessionEvent::QuestionAnswered => [
+                ...$base,
+                'kind' => 'answered',
+                'answered' => [
+                    'answer' => \is_string($p['answer'] ?? null) ? $p['answer'] : '',
+                    'by' => \is_array($p['by'] ?? null) ? $p['by'] : null,
+                    'executor' => \is_string($p['executor'] ?? null) ? $p['executor'] : null,
+                ],
+            ],
             // ── ACTIVIDAD: EN QUÉ ESTÁ LA SESIÓN AHORA MISMO ───────────────────────────────
             //
             // Un turno y una llamada a herramienta no cambian el TABLERO —ninguna tarjeta se mueve—
@@ -173,13 +191,27 @@ final readonly class SessionProjector
                     'result' => \is_string($p['result'] ?? null) ? $p['result'] : null,
                 ],
             ],
-            // Lo que no cambia lo que se ve: permisos, compactación, respuestas, cambios de modo,
-            // apertura, y el cierre de la ventana para contestar. Van explícitos y no en un `default`
+            // Lo que no cambia lo que se ve: permisos, compactación, cambios de modo, apertura, y
+            // el cierre de la ventana para contestar. Van explícitos y no en un `default`
             // para que agregar un evento nuevo obligue a decidir si se pinta — un `default`
             // silencioso haría que el siguiente hecho nazca invisible.
             // LA MESA CAMBIÓ, y eso se pinta: una superficie que muestre lo que el agente puede hacer
             // tiene que enterarse. El tablero lo ignora —no es una tarjeta— y una terminal puede
             // decirlo; cada superficie filtra, como con `activity`.
+            // The ordering obligation is painted because it explains why a call did not proceed:
+            // without it a surface shows a refusal with no visible cause, and whoever looks reads it
+            // as a failure.
+            SessionEvent::PrerequisiteSet => [
+                ...$base,
+                'kind' => 'prerequisite-set',
+                'activity' => [
+                    'state' => 'prerequisite-set',
+                    'detail' => implode(', ', array_filter(
+                        \is_array($p['tools'] ?? null) ? $p['tools'] : [],
+                        static fn ($t): bool => \is_string($t),
+                    )) ?: null,
+                ],
+            ],
             SessionEvent::OptionRemoved => [
                 ...$base,
                 'kind' => 'option-removed',
@@ -194,7 +226,6 @@ final readonly class SessionProjector
             ],
             SessionEvent::Started,
             SessionEvent::Compacted,
-            SessionEvent::QuestionAnswered,
             SessionEvent::AnswerWindowClosed,
             SessionEvent::PermissionGranted,
             SessionEvent::PermissionRevoked,

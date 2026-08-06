@@ -151,10 +151,59 @@ final class SessionProjectorTest extends TestCase
      * Un stream se lee años después de escribirse, y una superficie que inventa qué hacer con lo
      * desconocido pinta cualquier cosa con cara de dato.
      */
+    /**
+     * Answering PROJECTS: it is what clears the waiting banner.
+     *
+     * This event used to translate to `null` — «does not change what you see» — and that was false
+     * for the board: a surface showing the question kept showing it until the NEXT event arrived,
+     * so an answer without a resumption left an already-answered question on screen. Found watching
+     * a real session with the page open. The attribution travels whole: actor and executor are two
+     * identities and both were already in the fact.
+     */
+    public function testAnsweringProjectsSoTheWaitingBannerCanClear(): void
+    {
+        $eventos = new InMemoryEventStore();
+        $almacen = new SessionStore($eventos);
+        $almacen->start('s1', 'x');
+        $almacen->ask('s1', new \Milpa\Agent\PendingQuestion('q1', '¿Confirmas make?'));
+        $almacen->answer('s1', 'q1', 'sí', executor: 'cli:rod');
+
+        $pintables = (new SessionProjector())->projectAll($eventos->replay('agent-session:s1'));
+        $contestada = array_values(array_filter($pintables, static fn (array $x): bool => $x['kind'] === 'answered'));
+
+        self::assertCount(1, $contestada, 'la respuesta se proyecta, no se calla');
+        self::assertSame('sí', $contestada[0]['answered']['answer']);
+        self::assertSame('cli:rod', $contestada[0]['answered']['executor']);
+    }
+
     public function testAnUnknownEventTypeIsNotGuessed(): void
     {
         $evento = new \Milpa\EventStore\Event('agent-session:s1', 'algo.que.no.existe', [], 1);
 
         self::assertNull((new SessionProjector())->project($evento));
+    }
+
+    /**
+     * Every event the enum names has a DECIDED translation — even when the decision is «this
+     * changes nothing on any surface».
+     *
+     * The projector's match carries no default on purpose: an event added to the enum without a
+     * case there must break loudly, never be born invisible. This test is that breakage made
+     * visible in CI — it feeds the projector one event of every kind the enum knows, and an
+     * undecided case dies here with \UnhandledMatchError instead of in someone's browser.
+     */
+    public function testEveryEventTheEnumNamesHasADecidedTranslation(): void
+    {
+        $proyector = new SessionProjector();
+
+        // `null` is a decision («not painted anywhere»), not an omission: what this guards is the
+        // projection CALL itself — an undecided enum case dies right here with \UnhandledMatchError
+        // instead of in someone's browser, and the count below proves no case was skipped.
+        $decisiones = [];
+        foreach (\Milpa\Agent\SessionEvent::cases() as $tipo) {
+            $decisiones[] = $proyector->project(new \Milpa\EventStore\Event('agent-session:s1', $tipo->value, [], 1));
+        }
+
+        self::assertCount(\count(\Milpa\Agent\SessionEvent::cases()), $decisiones);
     }
 }

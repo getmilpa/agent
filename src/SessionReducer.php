@@ -56,6 +56,11 @@ final readonly class SessionReducer
         $permisos = [];
         /** @var list<string> $retiradas */
         $retiradas = [];
+
+        /** @var list<string> $primero */
+        $primero = [];
+
+        $huboObligacion = false;
         $resumen = null;
         $compactadoHasta = 0;
         $pregunta = null;
@@ -112,6 +117,14 @@ final readonly class SessionReducer
                 // sin ella, retomar una sesión sería retomarla sin saber qué ya se intentó, y el
                 // agente repetiría el trabajo que su yo anterior ya hizo.
                 SessionEvent::ToolCalled => [
+                    // AN OBLIGATION THAT WAS MET STOPS BEING ONE.
+                    //
+                    // Without this the prerequisite re-arms on every turn, and a resumed session
+                    // re-plans each time: measured on a real run, six identical cards for one task
+                    // and twenty pending for six. «Plan before starting» meant once, not once per
+                    // turn — and a board painted on the second reading is noisy where the empty one
+                    // was mute. Neither is a source.
+                    $primero = $this->sinCumplir($primero, \is_string($p['tool'] ?? null) ? $p['tool'] : ''),
                     // CUÁNTAS HERRAMIENTAS CORRIERON YA. Es lo que permite que el sistema sepa, sin
                     // preguntarle al agente, si una tarjeta nació antes o después del trabajo.
                     ++$herramientas,
@@ -128,6 +141,9 @@ final readonly class SessionReducer
                     $compactadoHasta = \is_int($p['through'] ?? null) ? $p['through'] : $compactadoHasta,
                 ],
                 SessionEvent::PlanSet => [
+                    // The bookkeeping tools do not travel through `session.tool_called`: they have
+                    // events of their own, so the obligation has to be discharged from here too.
+                    $primero = $this->sinCumplir($primero, 'plan'),
                     $plan = \is_string($p['plan'] ?? null) ? $p['plan'] : $plan,
                     // Sin `version` en el payload —eventos anteriores a que esto existiera— el linaje
                     // se cuenta desde uno. Reproducir una sesión vieja no le inventa versiones que
@@ -138,10 +154,13 @@ final readonly class SessionReducer
                 // no tiene origen, tiene un `from`— así que reconstruir la tarjeta desde el evento
                 // nuevo la dejaría sin él. Conservarlo es trabajo del fold, no del hecho: el stream
                 // dice qué pasó y el fold dice cómo quedó.
-                SessionEvent::TodoChanged => $todos[\is_string($p['id'] ?? null) ? $p['id'] : ''] = $this->conOrigen(
-                    Todo::fromArray($p),
-                    $todos[\is_string($p['id'] ?? null) ? $p['id'] : ''] ?? null,
-                ),
+                SessionEvent::TodoChanged => [
+                    $primero = $this->sinCumplir($primero, 'todo'),
+                    $todos[\is_string($p['id'] ?? null) ? $p['id'] : ''] = $this->conOrigen(
+                        Todo::fromArray($p),
+                        $todos[\is_string($p['id'] ?? null) ? $p['id'] : ''] ?? null,
+                    ),
+                ],
                 SessionEvent::QuestionAsked => $pregunta = PendingQuestion::fromArray($p),
                 // Contestar cierra la pregunta ABIERTA, y la respuesta entra como turno: es contexto
                 // que el modelo necesita en el siguiente paso, no metadato.
@@ -194,6 +213,17 @@ final readonly class SessionReducer
                 SessionEvent::OptionRemoved => $retiradas = \in_array($o = (\is_string($p['option'] ?? null) ? $p['option'] : ''), $retiradas, true) || $o === ''
                     ? $retiradas
                     : [...$retiradas, $o],
+                // REPLACED, never accumulated: the standing obligation is the last one somebody
+                // with authority declared. Accumulating would leave a session where each `--first`
+                // narrows the door further and nobody can widen it again — a table that drifts on
+                // its own, in the other direction.
+                SessionEvent::PrerequisiteSet => [
+                    $huboObligacion = $huboObligacion || ($p['tools'] ?? []) !== [],
+                    $primero = array_values(array_filter(
+                        \is_array($p['tools'] ?? null) ? $p['tools'] : [],
+                        static fn ($t): bool => \is_string($t) && trim($t) !== '',
+                    )),
+                ],
                 SessionEvent::PermissionGranted => $permisos = $this->conPermiso($permisos, $p),
                 SessionEvent::PermissionRevoked => $permisos = $this->sinPermiso($permisos, $p),
                 SessionEvent::ModeChanged => $mode = AutonomyMode::tryFrom(
@@ -227,6 +257,8 @@ final readonly class SessionReducer
             todos: array_values($todos),
             permissions: $permisos,
             removedOptions: $retiradas,
+            runFirst: $primero,
+            obligationDeclared: $huboObligacion,
             summary: $resumen,
             compactedThrough: $compactadoHasta,
             question: $pregunta,
@@ -242,7 +274,19 @@ final readonly class SessionReducer
             return $nueva;
         }
 
-        return new Todo($nueva->id, $nueva->text, $nueva->status, $nueva->version, $previa->origin, $nueva->mutationsAt);
+        // EVERY field travels: rebuilding by hand is how a new one goes missing with nothing saying
+        // so. `replaces` was lost right here, and the test caught it before it reached any board.
+        return new Todo(
+            $nueva->id,
+            $nueva->text,
+            $nueva->status,
+            $nueva->version,
+            $previa->origin,
+            $nueva->mutationsAt,
+            $nueva->planVersion,
+            $nueva->replaces,
+            $nueva->bornInPlan,
+        );
     }
 
     /**
@@ -261,6 +305,22 @@ final readonly class SessionReducer
         $permisos[] = $operacion;
 
         return $permisos;
+    }
+
+    /**
+     * The obligation minus what has just run.
+     *
+     * @param list<string> $pendientes
+     *
+     * @return list<string>
+     */
+    private function sinCumplir(array $pendientes, string $corrio): array
+    {
+        if ($corrio === '' || $pendientes === []) {
+            return $pendientes;
+        }
+
+        return array_values(array_filter($pendientes, static fn (string $t): bool => $t !== $corrio));
     }
 
     /**
