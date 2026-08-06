@@ -942,6 +942,31 @@ final class SessionStoreTest extends TestCase
     }
 
     /**
+     * LIFTING ENDS THE DISCIPLINE — not just the standing list.
+     *
+     * `obligationDeclared` is what the renewal reads, so a lift that only emptied `runFirst` would
+     * be re-armed with `todo` on the very next turn: the caller unset it and the session put it
+     * back. The empty set is the same authority unsetting what it set. The renewal's default stays
+     * ON (Rod, 2026-08-06, with sexto-brazo.tsv in hand), which is exactly what makes this lever
+     * load-bearing: it is the per-session exit.
+     */
+    public function testLiftingTheObligationEndsTheDisciplineNotJustTheStandingList(): void
+    {
+        $almacen = $this->store();
+        $almacen->start('s', 'x', AutonomyMode::Auto);
+        $almacen->requireFirst('s', ['plan']);
+        self::assertTrue($almacen->load('s')?->obligationDeclared);
+
+        $almacen->requireFirst('s', []);
+        self::assertSame([], $almacen->load('s')?->runFirst);
+        self::assertFalse($almacen->load('s')?->obligationDeclared, 'lifted: the renewal has nothing left to renew');
+
+        // And declaring again re-arms it: unsetting is not losing it forever.
+        $almacen->requireFirst('s', ['todo']);
+        self::assertTrue($almacen->load('s')?->obligationDeclared);
+    }
+
+    /**
      * EVERY CARD CARRIES THE PLAN GENERATION IT BELONGS TO.
      *
      * Re-planning is what completes long work — Q-P17-L measured 6/9 against 0/9 — and it is also

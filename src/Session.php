@@ -90,13 +90,15 @@ final readonly class Session
         /** @var list<string> tools that must run before any other call proceeds */
         public array $runFirst = [],
         /**
-         * Whether this session was EVER given a standing obligation.
+         * Whether this session currently carries a standing discipline: set by the last non-empty
+         * `--first`, revoked by an empty one — the same authority that set it, unsetting it.
          *
-         * Distinct from `$runFirst`, which empties as soon as the obligation is met. Renewing a
-         * discipline across resumed turns is a property of the session somebody set up that way —
-         * not of the app it happens to run in, which is where it lived first and where it could not
-         * be measured: an app-level flag reaches both arms of any experiment inside that app, so the
-         * control receives the treatment and stops being a control.
+         * Distinct from `$runFirst`, which empties as soon as the obligation is MET — being met
+         * does not erase having been obliged, so the renewal keeps working across resumed turns.
+         * Renewing is a property of the session somebody set up that way — not of the app it
+         * happens to run in, which is where it lived first and where it could not be measured: an
+         * app-level flag reaches both arms of any experiment inside that app, so the control
+         * receives the treatment and stops being a control.
          */
         public bool $obligationDeclared = false,
     ) {

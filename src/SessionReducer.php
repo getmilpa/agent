@@ -207,9 +207,9 @@ final readonly class SessionReducer
                     ],
                     $pregunta = null,
                 ],
-                // UNA OPCIÓN RETIRADA NO VUELVE en esta sesión. Es un hecho, no una preferencia: se
-                // apendó porque alguien con autoridad negó esa llamada, y reponerla sin otro hecho que
-                // lo diga sería una mesa que cambia sola.
+                // A REMOVED OPTION DOES NOT COME BACK in this session. It is a fact, not a
+                // preference: it was appended because someone with authority refused that call, and
+                // restoring it without another fact saying so would be a table that shifts on its own.
                 SessionEvent::OptionRemoved => $retiradas = \in_array($o = (\is_string($p['option'] ?? null) ? $p['option'] : ''), $retiradas, true) || $o === ''
                     ? $retiradas
                     : [...$retiradas, $o],
@@ -218,11 +218,18 @@ final readonly class SessionReducer
                 // narrows the door further and nobody can widen it again — a table that drifts on
                 // its own, in the other direction.
                 SessionEvent::PrerequisiteSet => [
-                    $huboObligacion = $huboObligacion || ($p['tools'] ?? []) !== [],
                     $primero = array_values(array_filter(
                         \is_array($p['tools'] ?? null) ? $p['tools'] : [],
                         static fn ($t): bool => \is_string($t) && trim($t) !== '',
                     )),
+                    // DECLARED OR LIFTED, last one wins — same rule as the list itself. An empty
+                    // set is the same authority UNSETTING the discipline, and it must reach the
+                    // flag the renewal reads: a lift that only emptied the list would be re-armed
+                    // with `todo` on the very next turn — the caller unset it and the session put
+                    // it back. Meeting the obligation is different: that empties the list through
+                    // its own events and never writes this one, so «being met does not erase having
+                    // been obliged» stays true.
+                    $huboObligacion = $primero !== [],
                 ],
                 SessionEvent::PermissionGranted => $permisos = $this->conPermiso($permisos, $p),
                 SessionEvent::PermissionRevoked => $permisos = $this->sinPermiso($permisos, $p),

@@ -79,6 +79,7 @@ A log you can edit stops being useful for the one thing a log is for.
 | `permissions` | consented **per operation and per session** — *"yes to `make`, in this session"* is a sentence someone can evaluate; *"yes to whatever the agent decides"* is not |
 | `question` | while one is open the session is not runnable. An agent that "asks" and proceeds on its assumption did not ask, it narrated |
 | `decisions` | what a human resolved when the session stopped to ask — with **who** resolved it, and whether that identity was verified |
+| `runFirst` / `obligationDeclared` | a standing obligation (`--first`) outlives the turn that typed it. Passing an empty one **lifts it** — the same authority that set it, unsetting it — and the lift ends the *discipline*, not just this turn's list: declared or lifted, the last one wins |
 | `summary` / `compactedThrough` | what the model is spared, never what the log forgets |
 
 ## The policy
