@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/getmilpa/agent/compare/v0.7.0...v0.8.0) (2026-08-07)
+
+
+### Features
+
+* an empty --first lifts the standing obligation — and the lift ends the discipline ([a45c5cc](https://github.com/getmilpa/agent/commit/a45c5ccfd4a14b894aab17e0b1f1ccef6f2f0fcf))
+
 ## [0.7.0](https://github.com/getmilpa/agent/compare/v0.6.0...v0.7.0) (2026-08-06)
 
 
