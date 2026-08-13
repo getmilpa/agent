@@ -33,7 +33,7 @@ jobs:
         run: composer install --prefer-dist --no-interaction --no-progress
       - name: License gate (runtime deps must be MIT / BSD / Apache-2.0 / ISC)
         run: |
-          composer licenses --no-dev --format=json | php -r '$d=json_decode(stream_get_contents(STDIN),true)?:[];$allow="~^(MIT|BSD-[0-9].*|Apache-2\\.0|ISC)$~";$bad=[];foreach(($d["dependencies"]??[]) as $n=>$i){$ls=(array)($i["license"]??[]);if($ls===[]){$bad[]="$n: (none declared)";continue;}foreach($ls as $l){if(!preg_match($allow,(string)$l))$bad[]="$n: $l";}}if($bad){fwrite(STDERR,"Disallowed dependency licenses (only MIT/BSD/Apache-2.0/ISC allowed):\n- ".implode("\n- ",$bad)."\n");exit(1);}echo "license gate ok: ".count($d["dependencies"]??[])." runtime deps, all MIT/BSD/Apache-2.0/ISC\n";'
+          composer licenses --no-dev --format=json | php -r '$d=json_decode(stream_get_contents(STDIN),true)?:[];$allow="~^(MIT|BSD-[0-9].*|Apache-2\\.0|ISC)$~";$bad=[];foreach(($d["dependencies"]??[]) as $n=>$i){$ls=(array)($i["license"]??[]);if($ls===[]){$bad[]="$n: (none declared)";continue;}$ok=false;foreach($ls as $l){if(preg_match($allow,(string)$l)){$ok=true;break;}}if(!$ok)$bad[]="$n: ".implode(" OR ",$ls);}if($bad){fwrite(STDERR,"Disallowed dependency licenses (only MIT/BSD/Apache-2.0/ISC allowed):\n- ".implode("\n- ",$bad)."\n");exit(1);}echo "license gate ok: ".count($d["dependencies"]??[])." runtime deps, each offered under MIT/BSD/Apache-2.0/ISC\n";'
 
       - name: PHP syntax
         run: find src tests tools -name '*.php' -print0 | xargs -0 -n1 php -l >/dev/null
