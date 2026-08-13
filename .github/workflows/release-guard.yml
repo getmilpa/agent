@@ -1,0 +1,65 @@
+name: Release guard
+
+# A RELEASE CANNOT BE PREVENTED, SO IT GETS REVERTED.
+#
+# Branch protection covers MERGING. `gh release create` is an API call that goes straight to the
+# world with nothing reviewing it, and there is no release protection the way there is branch
+# protection. Greenhouse evidence/0171 records the demonstration: a verdict said not green, the merge
+# was refused, and a release published anyway — tagging the previous commit with notes promising what
+# it did not contain, and Packagist took it.
+#
+# IT DRAFTS RATHER THAN DELETES. Deleting is what was done by hand and it worked, but as an
+# automatism the blast radius is wrong: one false positive destroys a legitimate release and its tag.
+# Drafting removes it from the public list and from Packagist, is reversible with one click, and
+# leaves the trace of why. A gate you can undo is the only kind you dare install everywhere.
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Is the tagged commit green?
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -uo pipefail
+          sha=$(gh api "repos/$REPO/commits/$TAG" -q .sha)
+          echo "tag $TAG → $sha"
+
+          # NO PODER VER NO ES ESTAR VERDE. A commit with no check runs at all is drafted too: a
+          # release published from a tree nobody ever tested is exactly the case this exists for.
+          total=$(gh api "repos/$REPO/commits/$sha/check-runs" -q '.total_count')
+          malos=$(gh api "repos/$REPO/commits/$sha/check-runs" \
+            -q '[.check_runs[] | select(.name | test("PHP|Boot proof|quality")) | select(.conclusion != "success")] | length')
+          verdes=$(gh api "repos/$REPO/commits/$sha/check-runs" \
+            -q '[.check_runs[] | select(.name | test("PHP|Boot proof|quality")) | select(.conclusion == "success")] | length')
+
+          echo "checks: $total · relevantes verdes: $verdes · relevantes no verdes: $malos"
+
+          if [ "$verdes" -gt 0 ] && [ "$malos" -eq 0 ]; then
+            echo "VERDE — el release se queda publicado."
+            exit 0
+          fi
+
+          echo "::error::$TAG apunta a un commit que no pasó ($verdes verdes, $malos no verdes de $total checks)"
+          gh release edit "$TAG" --repo "$REPO" --draft
+          cuerpo=$(printf '%s\n' \
+            "\`$TAG\` apunta a \`$sha\`, con $verdes check(s) relevantes en verde y $malos sin pasar, de $total." \
+            "" \
+            "Se pasó a **borrador** en vez de borrarlo: sale de la lista pública y de Packagist, y se deshace con un clic si esto es un falso positivo." \
+            "" \
+            "Publicar no pasa por la protección de rama — greenhouse evidence/0171.")
+
+          gh issue create --repo "$REPO" \
+            --title "Release $TAG pasado a borrador: su commit no está verde" \
+            --body "$cuerpo"
+          exit 1
