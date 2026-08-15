@@ -155,6 +155,23 @@ final class SessionObservationTest extends TestCase
         ], array_keys($o->answers));
     }
 
+    /**
+     * The store knows how to observe itself, so a surface never has to reach past it for the raw
+     * event store. Handing out the stream to build a view is how a second reader of the same facts
+     * appears, and two readers drift.
+     */
+    public function testTheStoreOffersTheObservationWithoutHandingOutTheStream(): void
+    {
+        $almacen = $this->store($eventos = new InMemoryEventStore());
+        $almacen->start('s1', 'x');
+        $almacen->recordModelCall('s1', $this->intake());
+
+        self::assertSame(
+            SessionObservation::of($eventos, 's1')->toArray(),
+            $almacen->observation('s1')->toArray(),
+        );
+    }
+
     public function testAnUnknownSessionIsNotAnEmptyObservation(): void
     {
         $o = SessionObservation::of(new InMemoryEventStore(), 'no-existe');

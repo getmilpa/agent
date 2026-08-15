@@ -528,6 +528,18 @@ final readonly class SessionStore
     }
 
     /**
+     * Lo que se puede observar de esta sesión — el hecho común, antes de proyectarlo.
+     *
+     * Vive aquí y no en quien pinta, para que ninguna superficie tenga que alcanzar el stream por su
+     * cuenta: repartir los eventos crudos para armar una vista es exactamente como aparece un segundo
+     * lector de los mismos hechos, y dos lectores divergen.
+     */
+    public function observation(string $id): SessionObservation
+    {
+        return SessionObservation::of($this->events, $id);
+    }
+
+    /**
      * Los hechos de una sesión, en orden, desde `$since` en adelante.
      *
      * Existe para que una superficie —terminal, navegador, agente— consuma el stream **traducido por
