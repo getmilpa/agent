@@ -166,6 +166,8 @@ final readonly class SessionStore
      * Apenda una llamada a herramienta con lo que devolvió.
      *
      * @param array<string, mixed> $arguments
+     * @param int|null             $resultChars Cuánto medía el resultado ANTES de cualquier
+     *                                          recorte. `null` es «nadie lo dijo».
      */
     public function recordToolCall(
         string $id,
@@ -174,11 +176,23 @@ final readonly class SessionStore
         string $result,
         bool $ok = true,
         bool $mutating = false,
+        ?int $resultChars = null,
     ): void {
         $this->append($id, SessionEvent::ToolCalled, [
             'tool' => $tool,
             'arguments' => $arguments,
             'result' => $result,
+            // CUÁNTO MEDÍA DE VERDAD, dicho por quien lo cortó.
+            //
+            // `result` puede venir recortado para no cargarle a la ventana lo que no aporta al
+            // retomar, y quien lo recorta es el único punto del sistema donde la cadena entera
+            // existe. Sin este número, una vista recibe 600 caracteres y no tiene forma de saber si
+            // son 600 de 600 o 600 de 2026 — calcularlo sería inventarlo.
+            //
+            // `null` es «nadie lo dijo», JAMÁS «no se cortó»: los eventos escritos antes de que esto
+            // existiera no pueden distinguir, y afirmar que están completos sería exactamente la
+            // mentira que este campo viene a impedir.
+            'resultChars' => $resultChars,
             'ok' => $ok,
             // SI ESTA LLAMADA CAMBIÓ ALGO. Lo sabe quien tiene la operación —la compuerta— y hasta
             // ahora no lo escribía, así que el stream no distinguía mirar de mover. Sin esa
