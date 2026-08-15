@@ -224,6 +224,16 @@ final readonly class SessionProjector
                     'detailWhy' => \is_string($p['reason']['message'] ?? null) ? $p['reason']['message'] : null,
                 ],
             ],
+            // ── LA ENTRADA NO SE PROYECTA AQUI, Y ES UNA DECISION ───────────────────────────
+            //
+            // Esta es la vista del HUMANO en vivo: lo que esta pasando y lo que espera respuesta. La
+            // entrada del agente —cuantas herramientas le ofrecieron, que contexto recibio— es un
+            // renglon por turno que ese lector no pidio, y una superficie que en cada linea aclara
+            // algo que nadie necesita se vuelve ilegible.
+            //
+            // No es que se pierda: vive en el stream y la superficie de desarrollador la lee de ahi.
+            // Que el humano pueda verla NO exige que la vea siempre.
+            SessionEvent::ModelCalled,
             SessionEvent::Started,
             SessionEvent::Compacted,
             SessionEvent::AnswerWindowClosed,

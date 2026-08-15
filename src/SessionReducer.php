@@ -246,7 +246,12 @@ final readonly class SessionReducer
                 // · `TodosTransferred` vive en la sesión ORIGEN y habla de otra: las tarjetas que se
                 //   fueron llegan a la destino como sus propios `todo_changed`, en su stream. Aplicarlo
                 //   aquí borraría de la origen lo que sí pasó ahí.
-                SessionEvent::EndedWithOpenWork, SessionEvent::TodosTransferred => null,
+                // · `ModelCalled` es la ENTRADA del agente, y el estado de la sesión es lo que pasó
+                //   con ella. Meterlo aquí como turno le agregaría a la conversación un renglón que
+                //   nunca viajó, y la siguiente llamada mandaría de vuelta al modelo el registro de
+                //   la anterior: observar el canal lo habría cambiado. La entrada se lee del stream,
+                //   que es donde vive, y no del estado reducido.
+                SessionEvent::EndedWithOpenWork, SessionEvent::TodosTransferred, SessionEvent::ModelCalled => null,
                 SessionEvent::Ended => $terminada = \is_string($p['because'] ?? null) ? $p['because'] : 'sin motivo',
             };
         }

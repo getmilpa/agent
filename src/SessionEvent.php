@@ -40,6 +40,27 @@ enum SessionEvent: string
     case ToolCalled = 'session.tool_called';
 
     /**
+     * Se le pidió algo al modelo: qué herramientas le ofrecieron, qué contexto recibió, con qué
+     * modelo, contra qué endpoint.
+     *
+     * ── LA MITAD QUE FALTABA ────────────────────────────────────────────────────────────────────
+     *
+     * Todo lo de arriba graba lo que el agente HIZO. Nada gravaba lo que al agente LE DIERON, y por
+     * eso depurarlo significaba parar un proxy frente al endpoint y leer el cable a mano. De las
+     * siete preguntas que gradúan una vista de desarrollador, el canal contestaba cuatro; las tres
+     * que faltaban eran todas de la entrada.
+     *
+     * SE DERIVA DEL CUERPO QUE VIAJÓ, no de lo que el código pensaba mandar. Esa distinción es el
+     * contrato: en cuanto el evento diga algo que el canal no dijo, deja de ser una observación y se
+     * vuelve un tercer inventario con mejor nombre.
+     *
+     * NO ES UN TURNO. Observar un canal no puede cambiarlo: si grabar lo que se le pidió al modelo
+     * también le metiera un turno a la conversación, cada corrida observada diferiría de la misma
+     * corrida sin observar, y una medición que altera lo que mide no es evidencia de nada.
+     */
+    case ModelCalled = 'session.model_called';
+
+    /**
      * A message between two sessions of the same tree — parent to child, or child to parent.
      *
      * ── WHY AN EVENT AND NOT A VARIABLE ─────────────────────────────────────────────────────────
