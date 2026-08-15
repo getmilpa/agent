@@ -177,6 +177,7 @@ final readonly class SessionStore
         bool $ok = true,
         bool $mutating = false,
         ?int $resultChars = null,
+        ?bool $awaitingConfirmation = null,
     ): void {
         $this->append($id, SessionEvent::ToolCalled, [
             'tool' => $tool,
@@ -193,6 +194,20 @@ final readonly class SessionStore
             // existiera no pueden distinguir, y afirmar que están completos sería exactamente la
             // mentira que este campo viene a impedir.
             'resultChars' => $resultChars,
+            // SI ESTA LLAMADA SÓLO PIDIÓ, en vez de haber hecho.
+            //
+            // Una petición de confirmación y una escritura consumada vuelven las dos con éxito, y
+            // sobre una operación que muta las dos se graban `ok` y `mutating` — que es verdad en
+            // ambas: la operación muta y la llamada no falló. Sin este campo, quien cuente
+            // mutaciones desde el stream cuenta DOS donde hubo UNA, y esa es justamente la cuenta
+            // que gobierna el consentimiento (greenhouse evidence/0200).
+            //
+            // No se corrige ningún campo: faltaba el que nadie escribía.
+            //
+            // `null` es «nadie lo dijo». Los eventos anteriores a esto no pueden distinguir, y
+            // darlos por consumados sería cometer contra la historia la misma sobrecuenta que este
+            // campo vino a quitar del presente.
+            'awaitingConfirmation' => $awaitingConfirmation,
             'ok' => $ok,
             // SI ESTA LLAMADA CAMBIÓ ALGO. Lo sabe quien tiene la operación —la compuerta— y hasta
             // ahora no lo escribía, así que el stream no distinguía mirar de mover. Sin esa

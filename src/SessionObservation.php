@@ -123,6 +123,9 @@ final class SessionObservation
                         'arguments' => (array) ($p['arguments'] ?? []),
                         'ok' => ($p['ok'] ?? true) === true,
                         'mutating' => ($p['mutating'] ?? false) === true,
+                        // Pedir no es haber hecho: se lee sólo si alguien lo declaró, porque de un
+                        // «ok» sobre una operación que muta no se deduce cuál de las dos cosas pasó.
+                        'awaitingConfirmation' => \is_bool($p['awaitingConfirmation'] ?? null) ? $p['awaitingConfirmation'] : null,
                         'result' => $guardado,
                         'chars' => mb_strlen($guardado),
                         'resultChars' => $medida,
