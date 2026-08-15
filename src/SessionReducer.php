@@ -134,6 +134,16 @@ final readonly class SessionReducer
                     'content' => (\is_string($p['tool'] ?? null) ? $p['tool'] : '?')
                         . ' → ' . (\is_string($p['result'] ?? null) ? $p['result'] : ''),
                         'seq' => $evento->seq,
+                        // LAS PARTES, ADEMÁS DE LA CADENA. `content` sigue igual para quien ya lo
+                        // leía; esto existe para que {@see Session::window()} pueda aplicarle el
+                        // tope AL RESULTADO y no a la línea entera, y le rinda al modelo el mismo
+                        // presupuesto de siempre en vez de uno nuevo que incluya el nombre.
+                        //
+                        // Partir `content` por su flecha para recuperarlas sería releer lo que uno
+                        // mismo compuso, y un nombre de herramienta con una flecha adentro rompería
+                        // esa lectura el día que exista.
+                        'tool' => \is_string($p['tool'] ?? null) ? $p['tool'] : '?',
+                        'result' => \is_string($p['result'] ?? null) ? $p['result'] : '',
                     ],
                 ],
                 SessionEvent::Compacted => [
