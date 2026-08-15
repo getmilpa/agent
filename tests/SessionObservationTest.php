@@ -167,6 +167,62 @@ final class SessionObservationTest extends TestCase
     }
 
     /**
+     * A RESULT THAT WAS CUT SAYS SO, WITH BOTH LENGTHS.
+     *
+     * The view receives the stored string and cannot tell whether it is all of it or a fragment —
+     * that information was destroyed one layer earlier, and computing it would be inventing it. So
+     * whoever cuts declares how long it really was, and the answer carries both numbers.
+     */
+    public function testAResultThatWasCutSaysSoWithBothLengths(): void
+    {
+        $eventos = new InMemoryEventStore();
+        $almacen = $this->store($eventos);
+        $almacen->start('s1', 'x');
+        $almacen->recordToolCall('s1', 'capabilities', [], str_repeat('x', 600), true, false, 2026);
+
+        $r = SessionObservation::of($eventos, 's1')->answers['returned']['value'][0];
+
+        self::assertSame(600, $r['chars'], 'lo que esta vista enseña');
+        self::assertSame(2026, $r['resultChars'], 'lo que la herramienta contestó');
+        self::assertTrue($r['truncated']);
+    }
+
+    public function testAResultThatFitIsNotReportedAsCut(): void
+    {
+        $eventos = new InMemoryEventStore();
+        $almacen = $this->store($eventos);
+        $almacen->start('s1', 'x');
+        $almacen->recordToolCall('s1', 'plugins_list', [], 'ok: dos plugins', true, false, 15);
+
+        $r = SessionObservation::of($eventos, 's1')->answers['returned']['value'][0];
+
+        self::assertFalse($r['truncated']);
+        self::assertSame(15, $r['resultChars']);
+    }
+
+    /**
+     * THE ONE THAT DECIDES.
+     *
+     * Events already written are never rewritten, so everything recorded before this existed cannot
+     * tell either way. Reporting `false` there would assert that nothing was cut when the only true
+     * thing is that nobody said — the same collapse of «empty» with «unknown» this class exists to
+     * refuse, and the fragment would go on passing for the whole answer.
+     */
+    public function testAnOlderCallSaysNOBODYSAIDRatherThanNotCut(): void
+    {
+        $eventos = new InMemoryEventStore();
+        $almacen = $this->store($eventos);
+        $almacen->start('s1', 'x');
+        $almacen->recordToolCall('s1', 'capabilities', [], str_repeat('x', 600), true, false);
+
+        $r = SessionObservation::of($eventos, 's1')->answers['returned']['value'][0];
+
+        self::assertNull($r['truncated'], 'nadie lo dijo, y eso no es «no se cortó»');
+        self::assertNull($r['resultChars']);
+        self::assertSame(600, $r['chars'], 'lo que se enseña sí se sabe siempre');
+    }
+
+    /**
      * THE ANSWER SAYS WHERE IT LOOKED, so its scope travels with it.
      *
      * This view is still partial in one specific way: it reports DECLARED withdrawals, and a filter

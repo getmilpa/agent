@@ -112,13 +112,21 @@ final class SessionObservation
                     break;
 
                 case SessionEvent::ToolCalled:
+                    $guardado = (string) ($p['result'] ?? '');
+                    // Lo que midió de verdad SÓLO si alguien lo declaró. No se deduce de la cadena
+                    // guardada: una cadena cortada y una completa del mismo largo son idénticas.
+                    $medida = \is_int($p['resultChars'] ?? null) ? $p['resultChars'] : null;
+
                     $llamadas[] = [
                         'seq' => $e->seq,
                         'tool' => (string) ($p['tool'] ?? '?'),
                         'arguments' => (array) ($p['arguments'] ?? []),
                         'ok' => ($p['ok'] ?? true) === true,
                         'mutating' => ($p['mutating'] ?? false) === true,
-                        'result' => (string) ($p['result'] ?? ''),
+                        'result' => $guardado,
+                        'chars' => mb_strlen($guardado),
+                        'resultChars' => $medida,
+                        'truncated' => $medida === null ? null : $medida > mb_strlen($guardado),
                     ];
 
                     break;
@@ -193,7 +201,17 @@ final class SessionObservation
                 'returned',
                 true,
                 static fn (): array => array_map(
-                    static fn (array $l): array => ['tool' => $l['tool'], 'ok' => $l['ok'], 'result' => $l['result']],
+                    // LAS DOS LONGITUDES VIAJAN CON LA RESPUESTA. Entregar el fragmento sin decir que
+                    // lo es deja a quien depura leyendo un pedazo como si fuera todo — y `truncated`
+                    // en `null` dice que nadie lo declaró, que no es lo mismo que no haberse cortado.
+                    static fn (array $l): array => [
+                        'tool' => $l['tool'],
+                        'ok' => $l['ok'],
+                        'result' => $l['result'],
+                        'chars' => $l['chars'],
+                        'resultChars' => $l['resultChars'],
+                        'truncated' => $l['truncated'],
+                    ],
                     $llamadas,
                 ),
                 '',
