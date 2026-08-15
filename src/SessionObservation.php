@@ -243,7 +243,15 @@ final class SessionObservation
             $retenidas[] = $r;
         }
 
-        return ['withdrawn' => $retenidas, 'recordedButStillOffered' => $anotadas];
+        return [
+            'withdrawn' => $retenidas,
+            'recordedButStillOffered' => $anotadas,
+            // DE DÓNDE SALIÓ, y no es decoración. Contestadas las siete, ninguna otra parte de la
+            // superficie carga el límite de esta respuesta: son los retiros DECLARADOS, y quien
+            // retire sin declarar es invisible aquí. Nombrar la fuente ES decir el alcance, en una
+            // llave en vez de un párrafo que nadie lee dos veces.
+            'readFrom' => 'session.option_removed',
+        ];
     }
 
     /**
