@@ -111,6 +111,32 @@ final readonly class Session
     }
 
     /**
+     * EL TOPE ES DE LA VENTANA, y de nadie más.
+     *
+     * Un resultado de herramienta grande le sirve entero a una superficie —que arma su tabla con
+     * él— y le estorba al modelo, cuyo contexto es lo que se acaba en una sesión larga. Durante un
+     * tiempo se recortó al ESCRIBIR, así que la ventana obtenía lo que necesitaba y la superficie
+     * pagaba la cuenta: medido sobre ganado, `capabilities` contestó 2004 caracteres, el log guardó
+     * 600, el valor dejó de parsear y el humano no vio tabla ninguna (greenhouse `evidence/0203`).
+     *
+     * **El tope pertenece a quien tiene la escasez.** El log guarda entero; aquí se recorta.
+     *
+     * Se le aplica AL RESULTADO y no a la línea completa, para rendirle al modelo el mismo
+     * presupuesto que antes en vez de uno nuevo que incluya el nombre de la herramienta.
+     */
+    private const MAX_TOOL_RESULT = 600;
+
+    /** @param array{role: string, content: string, tool?: string, result?: string} $turno */
+    private static function paraLaVentana(array $turno): string
+    {
+        if ($turno['role'] !== 'tool' || ! isset($turno['tool'], $turno['result'])) {
+            return $turno['content'];
+        }
+
+        return $turno['tool'] . ' → ' . mb_substr($turno['result'], 0, self::MAX_TOOL_RESULT);
+    }
+
+    /**
      * Lo que se le manda al modelo: el resumen de lo viejo, más los turnos que todavía no cubre.
      *
      * Es la razón entera de que compactar sea un evento y no una reescritura. El stream tiene los
@@ -142,7 +168,7 @@ final readonly class Session
 
         foreach ($this->turns as $turno) {
             if ($turno['seq'] > $this->compactedThrough) {
-                $ventana[] = ['role' => $turno['role'], 'content' => $turno['content']];
+                $ventana[] = ['role' => $turno['role'], 'content' => self::paraLaVentana($turno)];
             }
         }
 
