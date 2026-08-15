@@ -167,6 +167,27 @@ final class SessionObservationTest extends TestCase
     }
 
     /**
+     * THE ANSWER SAYS WHERE IT LOOKED, so its scope travels with it.
+     *
+     * This view is still partial in one specific way: it reports DECLARED withdrawals, and a filter
+     * that withdraws without declaring is invisible to it. Once every question is answered, nothing
+     * else on the surface carries that limit — and a partial view that does not declare itself
+     * partial is more dangerous than a small one. Naming the source IS the scope, in one key rather
+     * than a paragraph nobody reads twice.
+     */
+    public function testTheOmissionSaysWhichFactItWasReadFrom(): void
+    {
+        $eventos = new InMemoryEventStore();
+        $almacen = $this->store($eventos);
+        $almacen->start('s1', 'x');
+        $almacen->recordModelCall('s1', $this->intake());
+
+        $o = SessionObservation::of($eventos, 's1');
+
+        self::assertSame('session.option_removed', $o->answers['omitted']['value']['readFrom']);
+    }
+
+    /**
      * THE CONTROL THAT DECIDES.
      *
      * If the omission were computed by subtracting what was offered from some catalogue, changing
