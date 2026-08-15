@@ -86,7 +86,7 @@ final class SessionObservation
         $llamadas = [];
         $compuertas = [];
         $turnos = [];
-        $omision = null;
+        $retiros = [];
 
         foreach ($eventos as $e) {
             $p = (array) $e->payload;
@@ -94,9 +94,20 @@ final class SessionObservation
             switch (SessionEvent::tryFrom($e->type)) {
                 case SessionEvent::ModelCalled:
                     $entradas[] = ['seq' => $e->seq] + $p;
-                    // La omisión la DECLARA quien filtró. Si ninguna entrada la trae, queda en null y
-                    // esa pregunta se reporta sin contestar — nunca en cero.
-                    $omision ??= \is_array($p['omitted'] ?? null) ? $p['omitted'] : null;
+
+                    break;
+
+                    // LA OMISIÓN LA DECLARA QUIEN RETIRA, en el momento de retirar y con un código
+                    // estable. No hace falta un declarante nuevo: ya estaba en el stream, y lo que
+                    // faltaba era leerlo. *Una vista que no lee todo su canal miente con la misma
+                    // confianza que una que inventa.*
+                case SessionEvent::OptionRemoved:
+                    $retiros[] = [
+                        'seq' => $e->seq,
+                        'tool' => (string) ($p['option'] ?? '?'),
+                        'code' => \is_array($p['reason'] ?? null) ? (string) ($p['reason']['code'] ?? '?') : '?',
+                        'message' => \is_array($p['reason'] ?? null) ? (string) ($p['reason']['message'] ?? '') : '',
+                    ];
 
                     break;
 
@@ -160,12 +171,13 @@ final class SessionObservation
                 'nadie grabó lo que se le mandó al modelo en esta sesión',
             ),
             // NUNCA SE CALCULA. Restarle lo ofrecido al catálogo daría un número, y ese número sería
-            // conocimiento que el canal no dio.
+            // conocimiento que el canal no dio. Se LEE de las declaraciones y se cruza contra lo que
+            // viajó, que son los dos hechos que ya existen.
             'omitted' => self::respuesta(
                 'omitted',
-                $omision !== null,
-                static fn (): array => (array) $omision,
-                'nadie declaró haber retenido nada; esto NO quiere decir que no se haya retenido',
+                true,
+                static fn (): array => self::loRetenido($retiros, (array) ($ultima['tools'] ?? [])),
+                '',
             ),
             // ── LAS CUATRO DE SALIDA SIEMPRE ESTAN CONTESTADAS, Y UNA LISTA VACIA ES LA RESPUESTA ──
             //
@@ -198,6 +210,40 @@ final class SessionObservation
         }
 
         return new self($session, true, $answers, $mudas);
+    }
+
+    /**
+     * Lo declarado, cruzado contra lo que viajó.
+     *
+     * ── POR QUÉ NO BASTA CON LEER LOS RETIROS ───────────────────────────────────────────────────
+     *
+     * Existe un modo `record-only` que **graba el retiro y sigue ofreciendo la herramienta**. Contra
+     * él, «todo `option_removed` es una omisión» afirmaría que se retuvo algo que sí viajó — la
+     * misma vista mintiendo al revés. Así que las dos formas se nombran aparte y ninguna se supone.
+     *
+     * Lo que esto NO puede decir: si alguien retiró sin declarar. Esa frontera se hereda del canal,
+     * no la introduce esta función, y por eso la respuesta es «lo declarado» y no «lo ocurrido».
+     *
+     * @param list<array{seq: int, tool: string, code: string, message: string}> $retiros
+     * @param list<string>                                                       $viajaron
+     *
+     * @return array{withdrawn: list<array<string, mixed>>, recordedButStillOffered: list<array<string, mixed>>}
+     */
+    private static function loRetenido(array $retiros, array $viajaron): array
+    {
+        $retenidas = [];
+        $anotadas = [];
+
+        foreach ($retiros as $r) {
+            if (\in_array($r['tool'], $viajaron, true)) {
+                $anotadas[] = $r;
+
+                continue;
+            }
+            $retenidas[] = $r;
+        }
+
+        return ['withdrawn' => $retenidas, 'recordedButStillOffered' => $anotadas];
     }
 
     /**
