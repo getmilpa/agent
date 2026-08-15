@@ -188,6 +188,18 @@ final readonly class SessionStore
     }
 
     /**
+     * Apenda lo que se le pidió al modelo — la entrada del agente, leída del cuerpo que viajó.
+     *
+     * Va junto a lo que el agente hizo con ella y en el mismo orden, porque la pregunta que esto
+     * existe para contestar —«¿por qué llamó eso?»— sólo se contesta viendo las dos cosas en su
+     * secuencia: qué le ofrecieron, y qué escogió.
+     */
+    public function recordModelCall(string $id, ModelCallIntake $intake): void
+    {
+        $this->append($id, SessionEvent::ModelCalled, $intake->toPayload());
+    }
+
+    /**
      * Apenda un resumen de todo lo ocurrido hasta `$throughSeq` (P16.2).
      *
      * Los turnos resumidos SIGUEN en el stream. Lo que cambia es {@see Session::window()}, que deja de
