@@ -223,6 +223,79 @@ final class SessionObservationTest extends TestCase
     }
 
     /**
+     * A CALL THAT ONLY ASKED IS NOT A CALL THAT DID.
+     *
+     * Measured in a real chat session: `config_set` came back twice, both `ok` and both `mutating`,
+     * and only the second one wrote anything — the first returned a confirmation token. Whoever
+     * counts mutations from this stream counts two where there was one, and that is the count that
+     * governs consent.
+     *
+     * Neither `ok` nor `mutating` is corrected: the operation does mutate and the call did not fail.
+     * What was missing was not a wrong field but the one nobody wrote.
+     */
+    public function testACallThatOnlyAskedIsMarkedAsAwaiting(): void
+    {
+        $eventos = new InMemoryEventStore();
+        $almacen = $this->store($eventos);
+        $almacen->start('s1', 'x');
+        $almacen->recordToolCall('s1', 'config_set', ['key' => 'a'], (string) json_encode([
+            'requires_confirmation' => true,
+            'confirm_token' => 'fc6c5582',
+        ]), true, true, null, true);
+        $almacen->recordToolCall('s1', 'config_set', ['key' => 'a', 'confirm_token' => 'fc6c5582'], (string) json_encode([
+            'ok' => true,
+            'written_to' => '.milpa/agent.json',
+        ]), true, true, null, false);
+
+        $ll = SessionObservation::of($eventos, 's1')->answers['called']['value'];
+
+        self::assertTrue($ll[0]['awaitingConfirmation'], 'la primera sólo pidió');
+        self::assertFalse($ll[1]['awaitingConfirmation'], 'la segunda escribió');
+        self::assertTrue($ll[0]['mutating'], 'la operación muta, y eso no cambia');
+        self::assertTrue($ll[0]['ok'], 'y la llamada no falló, que también es cierto');
+    }
+
+    /**
+     * THE COUNT THAT GOVERNS CONSENT.
+     *
+     * The whole point of the field: mutations that actually happened are the ones that mutate AND did
+     * not stop to ask. Reading the stream without it gives two for the same single write.
+     */
+    public function testCountingCompletedMutationsGivesOneForOneWrite(): void
+    {
+        $eventos = new InMemoryEventStore();
+        $almacen = $this->store($eventos);
+        $almacen->start('s1', 'x');
+        $almacen->recordToolCall('s1', 'config_set', [], '{"requires_confirmation":true}', true, true, null, true);
+        $almacen->recordToolCall('s1', 'config_set', [], '{"ok":true}', true, true, null, false);
+        $almacen->recordToolCall('s1', 'plugins_list', [], 'ok', true, false, null, false);
+
+        $consumadas = array_filter(
+            SessionObservation::of($eventos, 's1')->answers['called']['value'],
+            static fn (array $l): bool => $l['mutating'] === true && $l['awaitingConfirmation'] !== true,
+        );
+
+        self::assertCount(1, $consumadas);
+    }
+
+    /**
+     * An older call cannot tell either way, and says so. The stream is never rewritten, so everything
+     * recorded before this existed would be asserted as consummated — the exact overcount the field
+     * came to remove, committed against history instead of against the present.
+     */
+    public function testAnOlderCallSaysNOBODYSAIDAboutAsking(): void
+    {
+        $eventos = new InMemoryEventStore();
+        $almacen = $this->store($eventos);
+        $almacen->start('s1', 'x');
+        $almacen->recordToolCall('s1', 'config_set', [], '{"requires_confirmation":true}', true, true);
+
+        $ll = SessionObservation::of($eventos, 's1')->answers['called']['value'];
+
+        self::assertNull($ll[0]['awaitingConfirmation']);
+    }
+
+    /**
      * THE ANSWER SAYS WHERE IT LOOKED, so its scope travels with it.
      *
      * This view is still partial in one specific way: it reports DECLARED withdrawals, and a filter
