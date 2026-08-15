@@ -96,14 +96,42 @@ final class SessionObservationTest extends TestCase
     }
 
     /**
-     * THE ONE THAT DECIDES EVERYTHING.
+     * WHAT WAS WITHHELD IS READ FROM ITS DECLARATION, NEVER SUBTRACTED.
      *
-     * Nobody declared an omission, so this says nobody declared one. It does not go and ask the tool
-     * registry how many tools exist in order to subtract. The moment it did, it would know something
-     * the stream never said — and a view that knows more than its channel is not a view of the
-     * system, it is a second opinion about it.
+     * The withdrawal is already a fact of the stream: whoever withdraws an option records it with a
+     * stable reason code at the moment of withdrawing. Reading that is not the same as computing it —
+     * asking a registry how many tools exist and subtracting would produce a number the channel never
+     * gave, which is exactly the falsifier this class exists under.
      */
-    public function testAnUndeclaredOmissionIsSaidToBeUNKNOWNRatherThanCalculated(): void
+    public function testWhatWasWithheldIsReadFromItsDeclaration(): void
+    {
+        $eventos = new InMemoryEventStore();
+        $almacen = $this->store($eventos);
+        $almacen->start('s1', 'x');
+        $almacen->recordModelCall('s1', $this->intake(['config_set']));
+        $almacen->removeOption('s1', 'plugins_list', 'denied-by-operator', 'whoever ran this agent excluded it');
+
+        $o = SessionObservation::of($eventos, 's1');
+
+        self::assertTrue($o->answers['omitted']['answered']);
+        self::assertSame(
+            [['tool' => 'plugins_list', 'code' => 'denied-by-operator']],
+            array_map(
+                static fn (array $w): array => ['tool' => $w['tool'], 'code' => $w['code']],
+                $o->answers['omitted']['value']['withdrawn'],
+            ),
+        );
+    }
+
+    /**
+     * NOTHING WITHDRAWN IS AN ANSWER, not a silence.
+     *
+     * Reading every declaration in the session and finding none is a measurement with a result. What
+     * it does NOT claim is that nothing was withheld — a filter that withdraws without declaring is
+     * invisible here by construction, and that boundary is inherited from the channel rather than
+     * introduced by this class.
+     */
+    public function testNoWithdrawalIsAnAnsweredQuestion(): void
     {
         $eventos = new InMemoryEventStore();
         $almacen = $this->store($eventos);
@@ -112,8 +140,57 @@ final class SessionObservationTest extends TestCase
 
         $o = SessionObservation::of($eventos, 's1');
 
-        self::assertFalse($o->answers['omitted']['answered']);
-        self::assertNotSame('', $o->answers['omitted']['because']);
+        self::assertTrue($o->answers['omitted']['answered']);
+        self::assertSame([], $o->answers['omitted']['value']['withdrawn']);
+    }
+
+    /**
+     * THE EDGE THAT WOULD MAKE THE VIEW LIE THE OTHER WAY.
+     *
+     * `record-only` records the withdrawal and keeps offering the tool. Against it, «every
+     * option_removed is an omission» would report something as withheld that actually travelled — so
+     * the declaration is crossed against what travelled, and the two cases are named apart.
+     */
+    public function testSomethingRecordedButStillOfferedIsNotReportedAsWithheld(): void
+    {
+        $eventos = new InMemoryEventStore();
+        $almacen = $this->store($eventos);
+        $almacen->start('s1', 'x');
+        $almacen->recordModelCall('s1', $this->intake(['plugins_list', 'config_set']));
+        $almacen->removeOption('s1', 'plugins_list', 'refused-by-gate', 'the gate refused it');
+
+        $o = SessionObservation::of($eventos, 's1');
+        $v = $o->answers['omitted']['value'];
+
+        self::assertSame([], $v['withdrawn'], 'it travelled, so it was not withheld');
+        self::assertSame(['plugins_list'], array_column($v['recordedButStillOffered'], 'tool'));
+    }
+
+    /**
+     * THE CONTROL THAT DECIDES.
+     *
+     * If the omission were computed by subtracting what was offered from some catalogue, changing
+     * what the agent was offered would move the answer. It must not: the withdrawals are read from
+     * their declarations, and nothing else feeds them.
+     */
+    public function testChangingWhatWasOfferedDoesNotMoveTheOmission(): void
+    {
+        $conMuchas = new InMemoryEventStore();
+        $a = $this->store($conMuchas);
+        $a->start('s1', 'x');
+        $a->recordModelCall('s1', $this->intake(['config_set', 'plan', 'todo', 'agent_spawn']));
+        $a->removeOption('s1', 'plugins_list', 'denied-by-operator', 'x');
+
+        $conPocas = new InMemoryEventStore();
+        $b = $this->store($conPocas);
+        $b->start('s1', 'x');
+        $b->recordModelCall('s1', $this->intake(['config_set']));
+        $b->removeOption('s1', 'plugins_list', 'denied-by-operator', 'x');
+
+        self::assertSame(
+            SessionObservation::of($conMuchas, 's1')->answers['omitted'],
+            SessionObservation::of($conPocas, 's1')->answers['omitted'],
+        );
     }
 
     /**
@@ -194,6 +271,6 @@ final class SessionObservationTest extends TestCase
         $json = $o->toArray();
 
         self::assertSame($o->answers, $json['answers']);
-        self::assertSame(['omitted'], $json['cannotSay']);
+        self::assertSame([], $json['cannotSay']);
     }
 }
