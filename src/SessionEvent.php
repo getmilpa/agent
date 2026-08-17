@@ -207,5 +207,25 @@ enum SessionEvent: string
      */
     case PrerequisiteSet = 'session.prerequisite_set';
 
+    /**
+     * THE EFFECT HAPPENED, and this is the only event that says so.
+     *
+     * {@see self::ToolCalled} describes a CALL. It carries `ok`, `mutating` and `awaitingConfirmation`
+     * — properties of the call and of its result. One operation can emit two of them, one that only
+     * asks for confirmation and one that executes, and both come back successful; an executor hung on
+     * that event would attribute an ATTEMPT with the face of a FACT.
+     *
+     * This one is emitted only when something was materialised, and it keeps TWO identities apart: the
+     * authority that permitted the effect, and the principal observed materialising it. They coincide
+     * in today's CLI because one process does nearly everything. The moment pause and resume, separate
+     * channels or deferred execution exist they stop coinciding — and a record that cannot tell them
+     * apart says "rod authorised it" about an effect somebody else produced. True, and the wrong truth.
+     *
+     * Both are captured WHEN THE ROLE IS EXERCISED. Neither may be re-derived afterwards from the
+     * reader's environment: a durable fact that changes author according to who reads it is two
+     * incompatible histories written from one stream.
+     */
+    case OperationExecuted = 'session.operation_executed';
+
     case Ended = 'session.ended';
 }

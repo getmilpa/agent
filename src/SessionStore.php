@@ -229,6 +229,44 @@ final readonly class SessionStore
     }
 
     /**
+     * Appends the fact that an operation was MATERIALISED — the one thing no other event declares.
+     *
+     * Both identities are written as they were OBSERVED at this moment, and neither may be rebuilt
+     * later from whoever happens to read the stream. That is the whole point of the event: a durable
+     * fact whose author changes with its reader is two incompatible histories.
+     *
+     * @param string          $operation      the canonical operation identity, never a surface spelling
+     * @param ?Principal      $executedBy     observed NOW; `null` is an honest gap and stays a gap
+     * @param string          $executorSource where that observation came from, so a reader can weigh it
+     * @param ?array{principal: ?string, provenance: string, session: ?string} $authorizedBy
+     *                                        the authority that covered this call; `null` says plainly
+     *                                        that none did, which is a fact and not a silence
+     * @param string          $argumentsDigest a reference to the arguments, not a second copy of them
+     */
+    public function recordExecution(
+        string $id,
+        string $operation,
+        ?Principal $executedBy,
+        string $executorSource,
+        ?array $authorizedBy,
+        string $argumentsDigest,
+    ): void {
+        $this->append($id, SessionEvent::OperationExecuted, [
+            'operation' => $operation,
+            // AN OBSERVATION THAT SAYS IT IS ONE. `principal` may be null; `source` and `verified`
+            // never are, because a name without its provenance is the false evidence this program
+            // has spent a month taking apart. Executing does not verify anybody.
+            'executed_by' => [
+                'principal' => $executedBy?->id,
+                'source' => $executorSource,
+                'verified' => $executedBy?->verified ?? false,
+            ],
+            'authorized_by' => $authorizedBy,
+            'arguments_digest' => $argumentsDigest,
+        ]);
+    }
+
+    /**
      * Apenda un resumen de todo lo ocurrido hasta `$throughSeq` (P16.2).
      *
      * Los turnos resumidos SIGUEN en el stream. Lo que cambia es {@see Session::window()}, que deja de
