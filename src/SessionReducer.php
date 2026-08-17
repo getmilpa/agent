@@ -270,6 +270,14 @@ final readonly class SessionReducer
                 // Este evento existe para una pregunta POSTERIOR —quién autorizó y quién ejecutó— que
                 // se contesta leyendo el stream, no el estado. Resumirlo aquí sería la segunda verdad
                 // que este diseño evita, y una atribución resumida es la que envejece mal.
+                // EL `system` TAMPOCO CAMBIA EL ESTADO DE LA SESIÓN, y por la misma razón que
+                // `ModelCalled`: es la ENTRADA, y `Session` es lo que hace falta para SEGUIR. El
+                // prompt se rearma en cada llamada desde la configuración —medido en
+                // `evidence/0223`, donde una sesión lo cambió a media corrida y la siguiente llamada
+                // lo recogió— así que doblarlo aquí guardaría una foto vieja al lado de la fuente
+                // viva. Este evento existe para el que AUDITA: contesta qué recibió el agente
+                // entonces, no con qué sigue ahora.
+                SessionEvent::SystemSet,
                 SessionEvent::OperationExecuted,
                 SessionEvent::EndedWithOpenWork, SessionEvent::TodosTransferred, SessionEvent::ModelCalled => null,
                 SessionEvent::Ended => $terminada = \is_string($p['because'] ?? null) ? $p['because'] : 'sin motivo',

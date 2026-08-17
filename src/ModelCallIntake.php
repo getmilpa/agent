@@ -34,15 +34,19 @@ namespace Milpa\Agent;
 final class ModelCallIntake
 {
     /**
-     * @param list<string>                          $tools        Los nombres ofrecidos, en su orden.
-     * @param bool                                  $toolsUnknown Viajaron herramientas y esta clase
-     *                                                            no supo nombrarlas. NO es lo mismo que
-     *                                                            no haber ofrecido ninguna.
-     * @param list<array{role: string, chars: int}> $messages     La FORMA de la conversación al momento
-     *                                                            de mandarla; el contenido ya vive en el
-     *                                                            stream como turnos.
-     * @param array<string, mixed>|null             $omitted      Lo que alguien DECLARÓ haber retenido.
-     *                                                            `null` es «nadie dijo», nunca «nada».
+     * @param list<string>                               $tools        Los nombres ofrecidos, en su orden.
+     * @param bool                                       $toolsUnknown Viajaron herramientas y esta clase
+     *                                                                 no supo nombrarlas. NO es lo mismo que
+     *                                                                 no haber ofrecido ninguna.
+     * @param list<array{role: string, content: string}> $messages     LO QUE VIAJÓ, no su tamaño. Los
+     *                                                                 turnos del stream son lo que la sesión
+     *                                                                 REGISTRÓ; esto es lo que de verdad se
+     *                                                                 mandó, y no siempre coinciden — después
+     *                                                                 de compactar, la ventana lleva un
+     *                                                                 resumen que ningún turno contiene
+     *                                                                 (greenhouse decisions/0039).
+     * @param array<string, mixed>|null                  $omitted      Lo que alguien DECLARÓ haber retenido.
+     *                                                                 `null` es «nadie dijo», nunca «nada».
      */
     private function __construct(
         public readonly string $endpoint,
@@ -82,7 +86,16 @@ final class ModelCallIntake
                 continue;
             }
 
-            $mensajes[] = ['role' => $rol, 'chars' => mb_strlen($contenido)];
+            // EL CONTENIDO, NO SU TAMAÑO (greenhouse decisions/0039).
+            //
+            // `{role, chars}` describe la FORMA de la conversación y deja «qué recibió el agente» sin
+            // contestar: dos mensajes distintos del mismo largo son indistinguibles, y todo lo que se
+            // construya encima hereda ese hueco — incluida la cadena de autoridad de `decisions/0037`.
+            //
+            // Se midió antes de decidirlo: grabar el contenido cuesta +18 %, y referenciar el `system`
+            // en vez de copiarlo ahorra 73 % del suyo. El stream queda 14 % MÁS CHICO que antes y
+            // además auditable (`evidence/0222` y `0223`).
+            $mensajes[] = ['role' => $rol, 'content' => $contenido];
         }
 
         [$tools, $desconocidas] = self::leerTools($payload['tools'] ?? null);
@@ -120,7 +133,26 @@ final class ModelCallIntake
     }
 
     /**
+     * CÓMO SE NOMBRA UN `system`, y en un solo lugar.
+     *
+     * El almacén apenda el hecho y esta clase escribe la referencia, así que los dos tienen que
+     * nombrarlo igual o el segundo no encontraría al primero. Componer el nombre en cada lado sería
+     * dos ortografías de una convención, que en esta casa ya se pagó una vez (`evidence/0141`).
+     *
+     * `null` cuando no viajó ningún `system`: no hay hecho que nombrar, y un nombre para la nada
+     * afirmaría que hubo prompt.
+     */
+    public function systemRef(): ?string
+    {
+        return $this->system === null ? null : 'sha256:' . hash('sha256', $this->system);
+    }
+
+    /**
      * La forma con la que esto se apenda al stream.
+     *
+     * Lleva la REFERENCIA y no el texto: el texto viaja una vez, en su propio hecho
+     * ({@see SessionEvent::SystemSet}), y cada llamada apunta al que estaba vigente. Quien reproduce
+     * los eventos de esta sesión —y nada más— siempre puede resolverla.
      *
      * @return array<string, mixed>
      */
@@ -131,7 +163,7 @@ final class ModelCallIntake
             'model' => $this->model,
             'tools' => $this->tools,
             'toolsUnknown' => $this->toolsUnknown,
-            'system' => $this->system,
+            'system_ref' => $this->systemRef(),
             'messages' => $this->messages,
             'omitted' => $this->omitted,
         ];

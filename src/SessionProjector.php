@@ -242,6 +242,10 @@ final readonly class SessionProjector
             //
             // Not painting it is NOT hiding it: it lives in the stream, which is where an audit looks.
             SessionEvent::OperationExecuted,
+            // EL `system` NO SE PINTA. Es la ENTRADA del agente, igual que `ModelCalled`, y quien mira
+            // la pantalla está viendo lo que pasó, no lo que se mandó. Pintarlo metería en la corrida
+            // un renglón de kilobytes que nadie pidió, cada vez que alguien toca la configuración.
+            SessionEvent::SystemSet,
             SessionEvent::ModelCalled,
             SessionEvent::Started,
             SessionEvent::Compacted,

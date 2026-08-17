@@ -227,5 +227,26 @@ enum SessionEvent: string
      */
     case OperationExecuted = 'session.operation_executed';
 
+    /**
+     * THE SYSTEM PROMPT CHANGED — or was set for the first time in this session.
+     *
+     * It is a FACT and not a field, which is what every other thing in this channel already is. The
+     * text used to travel whole on each {@see self::ModelCalled}, and measurement said what that cost:
+     * one distinct system per session across 32 sessions, 45% of the stream spent re-writing the half
+     * that does not change (greenhouse evidence/0223).
+     *
+     * Referencing it through an INDEX would have been the cheap fix and the wrong one: a stream that
+     * needs something outside itself to be read stops being legible on its own, which is the second
+     * truth `decisions/0035` forbids. Appending when it changes has no such problem — whoever replays
+     * forward always holds the current one.
+     *
+     * Both halves of that were measured before this existed, not argued: a session read in ISOLATION
+     * reconstructs identically, and deleting this event leaves every later call unreconstructable
+     * (`evidence/0224`); and a fact appended before a REAL compaction still reconstructs afterwards,
+     * because compacting appends a summary and moves a cut rather than deleting anything
+     * (`evidence/0225`).
+     */
+    case SystemSet = 'session.system_set';
+
     case Ended = 'session.ended';
 }
