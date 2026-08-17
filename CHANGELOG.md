@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.0](https://github.com/getmilpa/agent/compare/v0.15.0...v0.16.0) (2026-08-17)
+
+
+### Features
+
+* an event that declares the effect happened, and keeps two identities apart ([#25](https://github.com/getmilpa/agent/issues/25)) ([daed434](https://github.com/getmilpa/agent/commit/daed4347af0c95b29d1caff61d0b756b77969807))
+
 ## [0.8.0](https://github.com/getmilpa/agent/compare/v0.7.0...v0.8.0) (2026-08-07)
 
 
