@@ -235,13 +235,13 @@ final readonly class SessionStore
      * later from whoever happens to read the stream. That is the whole point of the event: a durable
      * fact whose author changes with its reader is two incompatible histories.
      *
-     * @param string          $operation      the canonical operation identity, never a surface spelling
-     * @param ?Principal      $executedBy     observed NOW; `null` is an honest gap and stays a gap
-     * @param string          $executorSource where that observation came from, so a reader can weigh it
+     * @param string                                                           $operation       the canonical operation identity, never a surface spelling
+     * @param ?Principal                                                       $executedBy      observed NOW; `null` is an honest gap and stays a gap
+     * @param string                                                           $executorSource  where that observation came from, so a reader can weigh it
      * @param ?array{principal: ?string, provenance: string, session: ?string} $authorizedBy
-     *                                        the authority that covered this call; `null` says plainly
-     *                                        that none did, which is a fact and not a silence
-     * @param string          $argumentsDigest a reference to the arguments, not a second copy of them
+     *                                                                                          the authority that covered this call; `null` says plainly
+     *                                                                                          that none did, which is a fact and not a silence
+     * @param string                                                           $argumentsDigest a reference to the arguments, not a second copy of them
      */
     public function recordExecution(
         string $id,
