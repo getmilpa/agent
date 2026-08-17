@@ -259,7 +259,7 @@ final readonly class SessionStore
             'executed_by' => [
                 'principal' => $executedBy?->id,
                 'source' => $executorSource,
-                'verified' => $executedBy?->verified ?? false,
+                'verified' => $executedBy !== null && $executedBy->verified,
             ],
             'authorized_by' => $authorizedBy,
             'arguments_digest' => $argumentsDigest,
