@@ -22,5 +22,17 @@ jobs:
     steps:
       - uses: googleapis/release-please-action@v4
         with:
+          # QUIÉN ABRE EL PR DE RELEASE, y no es cosmético.
+          #
+          # Con el `GITHUB_TOKEN` por defecto el PR lo firma `github-actions[bot]`, y GitHub retiene
+          # sus runs en `action_required`: alguien tiene que aprobarlos a mano, uno por uno, antes de
+          # que el PR pueda fusionarse. Medido sobre doce runs de cuatro repos (greenhouse
+          # evidence/0214): NINGUNO arrancó solo — todo `success` llevaba un aprobador humano detrás,
+          # y eso explica por qué la familia se publicó a mano once días.
+          #
+          # `||` para que esto funcione ANTES y DESPUÉS de que el secreto exista: sin él cae al token
+          # por defecto y todo sigue como hoy. Un cambio que exige un secreto para no romper es un
+          # cambio que rompe a quien no lo tiene.
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}
           config-file: .github/release-please-config.json
           manifest-file: .github/.release-please-manifest.json
