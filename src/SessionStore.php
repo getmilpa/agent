@@ -225,7 +225,36 @@ final readonly class SessionStore
      */
     public function recordModelCall(string $id, ModelCallIntake $intake): void
     {
+        // EL `system` SE APENDA CUANDO CAMBIA, y la llamada lo referencia (greenhouse decisions/0039).
+        //
+        // Va ANTES de la llamada que lo usa, no después: quien reproduce hacia adelante tiene que
+        // tenerlo cuando lo necesita. Apendarlo después dejaría la primera llamada de cada prompt
+        // irresoluble para un lector honesto, que es justo la propiedad que esto viene a dar.
+        $ref = $intake->systemRef();
+        if ($ref !== null && $this->systemVigente($id) !== $ref) {
+            $this->append($id, SessionEvent::SystemSet, ['ref' => $ref, 'system' => $intake->system]);
+        }
+
         $this->append($id, SessionEvent::ModelCalled, $intake->toPayload());
+    }
+
+    /**
+     * La referencia del `system` que esta sesión ya declaró, o `null` si todavía no declara ninguno.
+     *
+     * Se pregunta al stream DE ESTA SESIÓN y a ningún otro. Compartir la respuesta entre sesiones
+     * ahorraría un evento y rompería lo único que este diseño promete: que una sesión leída aislada se
+     * reconstruye. La segunda sesión resolvería contra un hecho que su propio canal no contiene.
+     */
+    private function systemVigente(string $id): ?string
+    {
+        $ultima = null;
+        foreach ($this->events->replay(self::PREFIX . $id) as $evento) {
+            if ($evento->type === SessionEvent::SystemSet->value) {
+                $ultima = \is_string($evento->payload['ref'] ?? null) ? $evento->payload['ref'] : $ultima;
+            }
+        }
+
+        return $ultima;
     }
 
     /**

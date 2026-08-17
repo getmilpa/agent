@@ -65,8 +65,12 @@ final class ModelCallRecordedTest extends TestCase
         self::assertNotNull($payload);
         self::assertSame(['plugins_list', 'config_set'], $payload['tools']);
         self::assertSame('qwen3-coder:30b', $payload['model']);
-        self::assertSame('eres un agente', $payload['system']);
-        self::assertSame([['role' => 'user', 'chars' => 4]], $payload['messages']);
+        // El texto del `system` ya NO viaja en la llamada: viaja una vez, en su propio hecho, y aquí
+        // queda su referencia (greenhouse decisions/0039). Que se resuelva leyendo sólo esta sesión
+        // es lo que fija SystemIsAFactTest.
+        self::assertArrayNotHasKey('system', $payload);
+        self::assertSame('sha256:' . hash('sha256', 'eres un agente'), $payload['system_ref']);
+        self::assertSame([['role' => 'user', 'content' => 'hola']], $payload['messages']);
     }
 
     /**

@@ -93,9 +93,13 @@ final class ModelCallIntakeTest extends TestCase
     /**
      * The conversation's CONTENT already lives in the stream as turns. What is not anywhere is its
      * shape at the moment of the send — after compaction dropped older turns, after the window slid.
-     * So the intake records shape and size, and does not duplicate what is already recorded.
+     *
+     * It used to record `{role, chars}` for exactly that reason, and greenhouse decisions/0039 changed
+     * it: a size leaves «what did the agent receive» unanswerable, since two different messages of the
+     * same length are indistinguishable. What the send-time record is FOR is answering that, and
+     * evidence/0222 measured the price — +18%, against a 73% saving on the system it stopped copying.
      */
-    public function testItRecordsTheShapeOfTheConversationAndNotACopyOfIt(): void
+    public function testItRecordsWhatTravelledAndNotOnlyItsShape(): void
     {
         $intake = ModelCallIntake::fromChannelPayload('https://x/y', [
             'model' => 'm',
@@ -107,7 +111,11 @@ final class ModelCallIntakeTest extends TestCase
         ]);
 
         self::assertSame(
-            [['role' => 'user', 'chars' => 4], ['role' => 'assistant', 'chars' => 6], ['role' => 'user', 'chars' => 7]],
+            [
+                ['role' => 'user', 'content' => 'hola'],
+                ['role' => 'assistant', 'content' => 'buenas'],
+                ['role' => 'user', 'content' => 'y ahora'],
+            ],
             $intake->messages,
         );
     }
@@ -141,8 +149,8 @@ final class ModelCallIntakeTest extends TestCase
             'model' => 'qwen3-coder:30b',
             'tools' => ['plugins_list'],
             'toolsUnknown' => false,
-            'system' => null,
-            'messages' => [['role' => 'user', 'chars' => 4]],
+            'system_ref' => null,
+            'messages' => [['role' => 'user', 'content' => 'hola']],
             'omitted' => null,
         ], $intake->toPayload());
     }

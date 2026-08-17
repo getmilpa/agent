@@ -87,11 +87,24 @@ final class SessionObservation
         $compuertas = [];
         $turnos = [];
         $retiros = [];
+        /** @var array<string, string> $systems el texto de cada `system` declarado en esta sesión */
+        $systems = [];
 
         foreach ($eventos as $e) {
             $p = (array) $e->payload;
 
             switch (SessionEvent::tryFrom($e->type)) {
+                // EL TEXTO DEL `system`, LEÍDO DE ESTA SESIÓN Y DE NINGUNA OTRA.
+                //
+                // Es lo que hace que la referencia no sea una deuda: la vista resuelve con los
+                // eventos que ya tiene delante, sin índice y sin preguntarle a otro stream. En
+                // cuanto necesitara algo de afuera sabría menos que su canal, que es lo que
+                // `decisions/0035` prohíbe.
+                case SessionEvent::SystemSet:
+                    $systems[(string) ($p['ref'] ?? '')] = (string) ($p['system'] ?? '');
+
+                    break;
+
                 case SessionEvent::ModelCalled:
                     $entradas[] = ['seq' => $e->seq] + $p;
 
@@ -175,7 +188,14 @@ final class SessionObservation
                 static fn (): array => [
                     'model' => $ultima['model'] ?? '?',
                     'endpoint' => $ultima['endpoint'] ?? '?',
-                    'system' => $ultima['system'] ?? null,
+                    // LA REFERENCIA SE RESUELVE; EL CAMPO VIEJO SE LEE.
+                    //
+                    // Los streams escritos antes de `decisions/0039` llevan el texto adentro de la
+                    // llamada, y esos siguen existiendo: leerlos NO es el fallback tramposo que
+                    // `evidence/0224` prohibió. Aquel prohibía caer de vuelta para que un control
+                    // significara algo; esto lee lo que de verdad se escribió. Se intenta la
+                    // referencia PRIMERO, así que en un stream nuevo el campo viejo nunca gana.
+                    'system' => $systems[(string) ($ultima['system_ref'] ?? '')] ?? ($ultima['system'] ?? null),
                     'messages' => (array) ($ultima['messages'] ?? []),
                     'calls' => \count($entradas),
                 ],
