@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.17.0](https://github.com/getmilpa/agent/compare/v0.16.0...v0.17.0) (2026-08-17)
+
+
+### Features
+
+* the system prompt becomes a fact appended when it changes ([#28](https://github.com/getmilpa/agent/issues/28)) ([6361d87](https://github.com/getmilpa/agent/commit/6361d878acebe215ecd6f4a475643986496a7736))
+
 ## [0.16.0](https://github.com/getmilpa/agent/compare/v0.15.0...v0.16.0) (2026-08-17)
 
 
