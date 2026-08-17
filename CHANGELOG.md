@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.17.1](https://github.com/getmilpa/agent/compare/v0.17.0...v0.17.1) (2026-08-17)
+
+
+### Bug Fixes
+
+* wait for relevant release checks ([#31](https://github.com/getmilpa/agent/issues/31)) ([525f651](https://github.com/getmilpa/agent/commit/525f651b86d4d5c139f6b87aa2b3f84406286158))
+
 ## [0.17.0](https://github.com/getmilpa/agent/compare/v0.16.0...v0.17.0) (2026-08-17)
 
 
