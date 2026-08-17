@@ -261,6 +261,16 @@ final readonly class SessionReducer
                 //   nunca viajó, y la siguiente llamada mandaría de vuelta al modelo el registro de
                 //   la anterior: observar el canal lo habría cambiado. La entrada se lee del stream,
                 //   que es donde vive, y no del estado reducido.
+                // EL HECHO DE UNA EJECUCIÓN NO CAMBIA EL ESTADO DE LA SESIÓN, y es una decisión.
+                //
+                // `Session` es lo que hace falta para SEGUIR: el objetivo, el plan, los pendientes, la
+                // pregunta abierta. Que una operación se haya materializado no mueve nada de eso — el
+                // resultado de la llamada ya viajó como turno y ya está en la ventana.
+                //
+                // Este evento existe para una pregunta POSTERIOR —quién autorizó y quién ejecutó— que
+                // se contesta leyendo el stream, no el estado. Resumirlo aquí sería la segunda verdad
+                // que este diseño evita, y una atribución resumida es la que envejece mal.
+                SessionEvent::OperationExecuted,
                 SessionEvent::EndedWithOpenWork, SessionEvent::TodosTransferred, SessionEvent::ModelCalled => null,
                 SessionEvent::Ended => $terminada = \is_string($p['because'] ?? null) ? $p['because'] : 'sin motivo',
             };

@@ -233,6 +233,15 @@ final readonly class SessionProjector
             //
             // No es que se pierda: vive en el stream y la superficie de desarrollador la lee de ahi.
             // Que el humano pueda verla NO exige que la vea siempre.
+            // ── THE FACT OF AN EXECUTION IS NOT PAINTED HERE EITHER, AND THAT IS ALSO A DECISION ──
+            //
+            // The live human ALREADY saw the call and its result; telling them it also happened would
+            // be two lines for one fact. This event does not exist for them — it exists for whoever
+            // asks, a year from now, WHY this operation acquired the right to run, and that reader is
+            // not watching the screen while it happens.
+            //
+            // Not painting it is NOT hiding it: it lives in the stream, which is where an audit looks.
+            SessionEvent::OperationExecuted,
             SessionEvent::ModelCalled,
             SessionEvent::Started,
             SessionEvent::Compacted,
