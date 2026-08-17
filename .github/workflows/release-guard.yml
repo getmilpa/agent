@@ -37,23 +37,49 @@ jobs:
 
           # NO PODER VER NO ES ESTAR VERDE. A commit with no check runs at all is drafted too: a
           # release published from a tree nobody ever tested is exactly the case this exists for.
-          total=$(gh api "repos/$REPO/commits/$sha/check-runs" -q '.total_count')
-          malos=$(gh api "repos/$REPO/commits/$sha/check-runs" \
-            -q '[.check_runs[] | select(.name | test("PHP|Boot proof|quality")) | select(.conclusion != "success")] | length')
-          verdes=$(gh api "repos/$REPO/commits/$sha/check-runs" \
-            -q '[.check_runs[] | select(.name | test("PHP|Boot proof|quality")) | select(.conclusion == "success")] | length')
+          max_waits=60
+          wait_seconds=10
+          waits=0
 
-          echo "checks: $total · relevantes verdes: $verdes · relevantes no verdes: $malos"
+          while :; do
+            counts=$(gh api "repos/$REPO/commits/$sha/check-runs" -q '
+              def relevant:
+                select((.details_url // "") | contains("/actions/runs/\(env.GITHUB_RUN_ID)/") | not) |
+                select(.name | test("PHP|Boot proof|quality"));
+              [
+                .total_count,
+                ([.check_runs[] | relevant] | length),
+                ([.check_runs[] | relevant | select(.status != "completed")] | length),
+                ([.check_runs[] | relevant | select(.conclusion == "success")] | length),
+                ([.check_runs[] | relevant | select(.conclusion != "success")] | length)
+              ] | @tsv')
+            IFS=$'\t' read -r total relevant pending green not_green <<< "$counts"
 
-          if [ "$verdes" -gt 0 ] && [ "$malos" -eq 0 ]; then
+            if [ "$relevant" -gt 0 ] && [ "$pending" -eq 0 ]; then
+              break
+            fi
+
+            if [ "$waits" -ge "$max_waits" ]; then
+              echo "::warning::Timed out after $((max_waits * wait_seconds)) seconds waiting for $pending relevant check(s)"
+              break
+            fi
+
+            waits=$((waits + 1))
+            echo "Waiting for relevant checks to appear or complete ($relevant found, $pending pending; $waits/$max_waits)"
+            sleep "$wait_seconds"
+          done
+
+          echo "checks: $total · relevantes verdes: $green · relevantes no verdes: $not_green"
+
+          if [ "$green" -gt 0 ] && [ "$not_green" -eq 0 ]; then
             echo "VERDE — el release se queda publicado."
             exit 0
           fi
 
-          echo "::error::$TAG apunta a un commit que no pasó ($verdes verdes, $malos no verdes de $total checks)"
+          echo "::error::$TAG apunta a un commit que no pasó ($green verdes, $not_green no verdes de $total checks)"
           gh release edit "$TAG" --repo "$REPO" --draft
           cuerpo=$(printf '%s\n' \
-            "\`$TAG\` apunta a \`$sha\`, con $verdes check(s) relevantes en verde y $malos sin pasar, de $total." \
+            "\`$TAG\` apunta a \`$sha\`, con $green check(s) relevantes en verde y $not_green sin pasar, de $total." \
             "" \
             "Se pasó a **borrador** en vez de borrarlo: sale de la lista pública y de Packagist, y se deshace con un clic si esto es un falso positivo." \
             "" \
