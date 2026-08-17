@@ -42,15 +42,20 @@ jobs:
           waits=0
 
           while :; do
-            counts=$(gh api "repos/$REPO/commits/$sha/check-runs" -q '[
-              .total_count,
-              ([.check_runs[] | select(.name | test("PHP|Boot proof|quality")) | select(.status != "completed")] | length),
-              ([.check_runs[] | select(.name | test("PHP|Boot proof|quality")) | select(.conclusion == "success")] | length),
-              ([.check_runs[] | select(.name | test("PHP|Boot proof|quality")) | select(.conclusion != "success")] | length)
-            ] | @tsv')
-            IFS=$'\t' read -r total pending green not_green <<< "$counts"
+            counts=$(gh api "repos/$REPO/commits/$sha/check-runs" -q '
+              def relevant:
+                select((.details_url // "") | contains("/actions/runs/\(env.GITHUB_RUN_ID)/") | not) |
+                select(.name | test("PHP|Boot proof|quality"));
+              [
+                .total_count,
+                ([.check_runs[] | relevant] | length),
+                ([.check_runs[] | relevant | select(.status != "completed")] | length),
+                ([.check_runs[] | relevant | select(.conclusion == "success")] | length),
+                ([.check_runs[] | relevant | select(.conclusion != "success")] | length)
+              ] | @tsv')
+            IFS=$'\t' read -r total relevant pending green not_green <<< "$counts"
 
-            if [ "$pending" -eq 0 ]; then
+            if [ "$relevant" -gt 0 ] && [ "$pending" -eq 0 ]; then
               break
             fi
 
@@ -60,7 +65,7 @@ jobs:
             fi
 
             waits=$((waits + 1))
-            echo "Waiting for $pending relevant check(s) to complete ($waits/$max_waits)"
+            echo "Waiting for relevant checks to appear or complete ($relevant found, $pending pending; $waits/$max_waits)"
             sleep "$wait_seconds"
           done
 
