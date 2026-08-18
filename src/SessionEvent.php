@@ -248,5 +248,21 @@ enum SessionEvent: string
      */
     case SystemSet = 'session.system_set';
 
+    /**
+     * Somebody SIGNED a claim of ownership over this session (greenhouse decisions/0056).
+     *
+     * What travels is the ASSERTION — the signed payload, its signature, the key fingerprint and
+     * the signer's uid — and NEVER a trust grade. That split is the receipt doctrine of greenhouse
+     * evidence/0254 made event: a stored «verified: true» would be a coin anyone can mint by
+     * editing a line, while a stored signature is a receipt that either re-verifies or does not.
+     * The grade is produced by RE-VERIFYING the signature at consumption, in the app runtime —
+     * whoever reads this event without re-verifying holds data, not trust.
+     *
+     * Appended, never rewritten, like everything else here: a later signer does not erase the
+     * earlier fact, and the fold answers with the LAST assertion because ownership is a claim about
+     * now, while the stream keeps who claimed it before.
+     */
+    case OwnershipAsserted = 'session.ownership_asserted';
+
     case Ended = 'session.ended';
 }

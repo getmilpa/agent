@@ -246,6 +246,13 @@ final readonly class SessionProjector
             // la pantalla está viendo lo que pasó, no lo que se mandó. Pintarlo metería en la corrida
             // un renglón de kilobytes que nadie pidió, cada vez que alguien toca la configuración.
             SessionEvent::SystemSet,
+            // THE OWNERSHIP ASSERTION IS NOT PAINTED, and that is a decision the exhaustive match
+            // forces. Painting it would put a signature block on the live human's screen as if it
+            // meant something there — and on this surface, unverified, it means nothing yet: the
+            // grade only exists after re-verification at consumption (greenhouse decisions/0056,
+            // evidence/0254). Whoever needs it reads it from the fold, where its docblock says
+            // what it is not.
+            SessionEvent::OwnershipAsserted,
             SessionEvent::ModelCalled,
             SessionEvent::Started,
             SessionEvent::Compacted,
