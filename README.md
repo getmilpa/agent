@@ -48,8 +48,9 @@ $sessions->recordToolCall('migrate-inventory', 'make', ['what' => 'entity'], 'ok
 
 // A different process, tomorrow:
 $session = $sessions->load('migrate-inventory');
-$session->goal;        // 'move the Inventario plugin to sqlite'
-$session->window();    // what to send the model: summary + recent turns
+$session->goal;               // 'move the Inventario plugin to sqlite'
+$session->window();           // provider messages: summary + current state + recent turns
+$session->classifiedWindow(); // the same window with summary / briefing / turn declarations
 $session->isRunnable();
 ```
 
