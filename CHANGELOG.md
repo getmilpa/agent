@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.19.0](https://github.com/getmilpa/agent/compare/v0.18.0...v0.19.0) (2026-08-18)
+
+
+### Features
+
+* a session stores the signed assertion that names its owner ([#35](https://github.com/getmilpa/agent/issues/35)) ([5239361](https://github.com/getmilpa/agent/commit/52393614629950d32780ea786a638c3a86e9a496))
+
 ## [0.18.0](https://github.com/getmilpa/agent/compare/v0.17.1...v0.18.0) (2026-08-18)
 
 
