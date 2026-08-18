@@ -513,6 +513,50 @@ final readonly class SessionStore
     }
 
     /**
+     * Appends a SIGNED claim of ownership over this session (greenhouse decisions/0056).
+     *
+     * What is appended is the ASSERTION — payload, signature, fingerprint, uid — and never a trust
+     * grade: the grade is produced by re-verifying the signature at consumption, in the app
+     * runtime, against the app's own registry of recognised fingerprints (greenhouse
+     * evidence/0254). This store is the scribe, not the verifier — a verdict written here would be
+     * the stored coin that doctrine exists to forbid.
+     *
+     * What it DOES refuse is a claim that is not an assertion: an assertion without its signature
+     * is not an assertion, it is prose with a confident name — and appending it would hand the
+     * consumer a receipt that can never re-verify, indistinguishable from a forgery. The shape is
+     * checked here, at the door, because the stream keeps whatever it is given forever.
+     *
+     * @param array<string, mixed> $assertion the signed claim: non-empty string `payload`,
+     *                                        `signature` and `fingerprint`, plus `uid` — the
+     *                                        signer's self-declared name, string or `null`,
+     *                                        present so nobody mistakes its absence for a gap
+     *
+     * @throws \InvalidArgumentException when the claim does not carry that shape
+     */
+    public function assertOwnership(string $id, array $assertion): void
+    {
+        foreach (['payload', 'signature', 'fingerprint'] as $field) {
+            if (!\is_string($assertion[$field] ?? null) || $assertion[$field] === '') {
+                throw new \InvalidArgumentException(sprintf(
+                    'an ownership assertion without its "%s" is not an assertion: it must carry '
+                    . 'non-empty string "payload", "signature" and "fingerprint" — nothing less '
+                    . 'can be re-verified at consumption (greenhouse decisions/0056)',
+                    $field,
+                ));
+            }
+        }
+
+        if (!\array_key_exists('uid', $assertion) || ($assertion['uid'] !== null && !\is_string($assertion['uid']))) {
+            throw new \InvalidArgumentException(
+                'an ownership assertion must declare its "uid" — the signer\'s self-declared name '
+                . 'as a string, or null to say plainly that none was declared (greenhouse decisions/0056)',
+            );
+        }
+
+        $this->append($id, SessionEvent::OwnershipAsserted, ['assertion' => $assertion]);
+    }
+
+    /**
      * Retirar una opción de la mesa de esta sesión.
      *
      * Se llama cuando una autoridad ya negó esa llamada: la negativa deja de ser un mensaje y pasa a

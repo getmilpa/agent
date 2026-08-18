@@ -67,6 +67,8 @@ final readonly class SessionReducer
         /** @var list<array{question: string, answer: string}> $decisiones */
         $decisiones = [];
         $terminada = null;
+        /** @var array<string, mixed>|null $ownership */
+        $ownership = null;
 
         foreach ($events as $evento) {
             $tipo = SessionEvent::tryFrom($evento->type);
@@ -241,6 +243,12 @@ final readonly class SessionReducer
                     // been obliged» stays true.
                     $huboObligacion = $primero !== [],
                 ],
+                // THE ASSERTION FOLDS AS DATA, AND THE LAST ONE WINS. No verification happens
+                // here — a pure reducer cannot call gpg, and must not pretend to: the grade is
+                // produced by re-verifying the signature at consumption, in the app runtime
+                // (greenhouse decisions/0056, evidence/0254). Earlier assertions stay in the
+                // stream; what this projection answers is who signed this session most recently.
+                SessionEvent::OwnershipAsserted => $ownership = $this->assertionFrom($p, $ownership),
                 SessionEvent::PermissionGranted => $permisos = $this->conPermiso($permisos, $p),
                 SessionEvent::PermissionRevoked => $permisos = $this->sinPermiso($permisos, $p),
                 SessionEvent::ModeChanged => $mode = AutonomyMode::tryFrom(
@@ -304,7 +312,32 @@ final readonly class SessionReducer
             question: $pregunta,
             decisions: $decisiones,
             endedBecause: $terminada,
+            ownershipAssertion: $ownership,
         );
+    }
+
+    /**
+     * The assertion an ownership event carries, EXACTLY as persisted — or the previous one when
+     * the event carries none.
+     *
+     * Untouched on purpose: the consumer re-verifies these bytes against their signature, and a
+     * reducer that «normalised» them would break every honest receipt while fixing nothing — a
+     * malformed event in the stream is a fact about the stream, not something to repair on read.
+     *
+     * @param array<string, mixed>      $payload
+     * @param array<string, mixed>|null $previous
+     *
+     * @return array<string, mixed>|null
+     */
+    private function assertionFrom(array $payload, ?array $previous): ?array
+    {
+        $assertion = $payload['assertion'] ?? null;
+        if (!\is_array($assertion)) {
+            return $previous;
+        }
+
+        /** @var array<string, mixed> $assertion */
+        return $assertion;
     }
 
     /** La tarjeta nueva con el origen que ya tenía, si lo tenía: nacer se declara una sola vez. */

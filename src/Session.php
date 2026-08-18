@@ -101,6 +101,16 @@ final readonly class Session
          * receives the treatment and stops being a control.
          */
         public bool $obligationDeclared = false,
+        /**
+         * The LAST signed ownership assertion this stream carries, or `null` when nobody signed.
+         *
+         * Private on purpose: the one reading surface is {@see ownershipAssertion()}, which is
+         * where the doctrine about what this data is NOT lives — two doors into a fact this easy
+         * to misread would be one door too many.
+         *
+         * @var array<string, mixed>|null
+         */
+        private ?array $ownershipAssertion = null,
     ) {
     }
 
@@ -233,6 +243,25 @@ final readonly class Session
         }
 
         return implode("\n", $lineas);
+    }
+
+    /**
+     * The signed ownership assertion of the LAST `ownership_asserted` event, or `null` when nobody
+     * ever signed this session.
+     *
+     * DATA, NOT TRUST. What comes back is the assertion exactly as it was appended — payload,
+     * signature, fingerprint, uid — and no verdict about any of it, because the session stores a
+     * signed ASSERTION and never a grade (greenhouse decisions/0056). The grade is produced by
+     * RE-VERIFYING the signature at consumption, in the app runtime, against the app's registry of
+     * recognised fingerprints (greenhouse evidence/0254: a receipt, not a coin). A reader who
+     * skips that re-verification holds what somebody once wrote into a stream — which a forger can
+     * also do — not who owns this session.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function ownershipAssertion(): ?array
+    {
+        return $this->ownershipAssertion;
     }
 
     /** Si esta sesión ya tiene consentida esa operación. */
