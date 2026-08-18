@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.18.0](https://github.com/getmilpa/agent/compare/v0.17.1...v0.18.0) (2026-08-18)
+
+
+### Features
+
+* declare each session window message class ([#33](https://github.com/getmilpa/agent/issues/33)) ([dfef1c8](https://github.com/getmilpa/agent/commit/dfef1c898ed7522841c43bc0da0e9c030b0f7154))
+
 ## [0.17.1](https://github.com/getmilpa/agent/compare/v0.17.0...v0.17.1) (2026-08-17)
 
 
