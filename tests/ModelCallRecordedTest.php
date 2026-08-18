@@ -24,13 +24,14 @@ use PHPUnit\Framework\TestCase;
  */
 final class ModelCallRecordedTest extends TestCase
 {
-    private function intake(): ModelCallIntake
+    /** @param list<array{role: string, content: string, class: string}>|null $window */
+    private function intake(?array $window = null): ModelCallIntake
     {
         return ModelCallIntake::fromChannelPayload('https://llama.local/v1/chat/completions', [
             'model' => 'qwen3-coder:30b',
             'messages' => [['role' => 'system', 'content' => 'eres un agente'], ['role' => 'user', 'content' => 'hola']],
             'tools' => [['name' => 'plugins_list'], ['name' => 'config_set']],
-        ]);
+        ], window: $window);
     }
 
     public function testWhatWasSentToTheModelIsAppendedToTheStream(): void
@@ -71,6 +72,28 @@ final class ModelCallRecordedTest extends TestCase
         self::assertArrayNotHasKey('system', $payload);
         self::assertSame('sha256:' . hash('sha256', 'eres un agente'), $payload['system_ref']);
         self::assertSame([['role' => 'user', 'content' => 'hola']], $payload['messages']);
+    }
+
+    public function testTheComposersDeclarationsReachTheStreamBesideTheWireMessages(): void
+    {
+        $events = new InMemoryEventStore();
+        $store = new SessionStore($events);
+        $store->start('s1', 'x');
+        $window = [['role' => 'system', 'content' => 'current plan', 'class' => 'briefing']];
+
+        $store->recordModelCall('s1', $this->intake($window));
+
+        $recorded = null;
+        foreach ($events->replay(SessionStore::PREFIX . 's1') as $event) {
+            if ($event->type === 'session.model_called') {
+                $recorded = $event->payload;
+            }
+        }
+
+        self::assertNotNull($recorded);
+        self::assertSame($window, $recorded['window']);
+        self::assertSame([['role' => 'user', 'content' => 'hola']], $recorded['messages']);
+        self::assertArrayNotHasKey('class', $recorded['messages'][0]);
     }
 
     /**

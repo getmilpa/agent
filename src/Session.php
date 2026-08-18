@@ -148,31 +148,57 @@ final readonly class Session
      */
     public function window(): array
     {
-        $ventana = [];
+        $providerWindow = [];
+        foreach ($this->classifiedWindow() as $message) {
+            $providerWindow[] = ['role' => $message['role'], 'content' => $message['content']];
+        }
+
+        return $providerWindow;
+    }
+
+    /**
+     * The composed window with each message's reason declared beside its provider role and content.
+     *
+     * This is the channel representation, not a provider payload. {@see window()} projects the same
+     * composition down to the two provider fields, so classification can be recorded out of band
+     * without teaching a gateway or a model a Milpa-only key.
+     *
+     * @return list<array{role: string, content: string, class: value-of<WindowMessageClass>}>
+     */
+    public function classifiedWindow(): array
+    {
+        $window = [];
         if ($this->summary !== null && $this->summary !== '') {
-            $ventana[] = [
+            $window[] = [
                 'role' => 'system',
                 'content' => "Resumen de lo que ya pasó en esta sesión:\n" . $this->summary,
+                'class' => WindowMessageClass::Summary->value,
             ];
         }
 
-        // EL ESTADO VA EN LA VENTANA, y va DESPUÉS del resumen y ANTES de los turnos: es lo último
-        // que se sabe, no algo que pasó. Sin esto, el plan vivía en el stream y no llegaba al modelo,
-        // así que el agente lo escribía y no lo volvía a ver — un plan que sólo sirve para auditar es
-        // media función. Y se rinde el plan ACTUAL, no el que había cuando se escribió: la ventana
-        // describe dónde estamos.
-        $estado = $this->stateBriefing();
-        if ($estado !== null) {
-            $ventana[] = ['role' => 'system', 'content' => $estado];
+        // CURRENT STATE belongs after the summary and before the turns: it is what is known now, not
+        // something that happened. The current plan is rendered rather than the historical one, so
+        // the window describes where the session is instead of preserving a stale projection.
+        $state = $this->stateBriefing();
+        if ($state !== null) {
+            $window[] = [
+                'role' => 'system',
+                'content' => $state,
+                'class' => WindowMessageClass::Briefing->value,
+            ];
         }
 
-        foreach ($this->turns as $turno) {
-            if ($turno['seq'] > $this->compactedThrough) {
-                $ventana[] = ['role' => $turno['role'], 'content' => self::paraLaVentana($turno)];
+        foreach ($this->turns as $turn) {
+            if ($turn['seq'] > $this->compactedThrough) {
+                $window[] = [
+                    'role' => $turn['role'],
+                    'content' => self::paraLaVentana($turn),
+                    'class' => WindowMessageClass::Turn->value,
+                ];
             }
         }
 
-        return $ventana;
+        return $window;
     }
 
     /**

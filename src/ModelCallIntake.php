@@ -34,19 +34,28 @@ namespace Milpa\Agent;
 final class ModelCallIntake
 {
     /**
-     * @param list<string>                               $tools        Los nombres ofrecidos, en su orden.
-     * @param bool                                       $toolsUnknown Viajaron herramientas y esta clase
-     *                                                                 no supo nombrarlas. NO es lo mismo que
-     *                                                                 no haber ofrecido ninguna.
-     * @param list<array{role: string, content: string}> $messages     LO QUE VIAJÓ, no su tamaño. Los
-     *                                                                 turnos del stream son lo que la sesión
-     *                                                                 REGISTRÓ; esto es lo que de verdad se
-     *                                                                 mandó, y no siempre coinciden — después
-     *                                                                 de compactar, la ventana lleva un
-     *                                                                 resumen que ningún turno contiene
-     *                                                                 (greenhouse decisions/0039).
-     * @param array<string, mixed>|null                  $omitted      Lo que alguien DECLARÓ haber retenido.
-     *                                                                 `null` es «nadie dijo», nunca «nada».
+     * `$messages` preserves the provider wire shape. `$window` preserves the separate logical
+     * composition that Session declared before the gateway added prompts, tool exchanges, or
+     * provider-specific rewrites. They are deliberately not joined by position or content.
+     *
+     * @param list<string>                                                                         $tools        Los nombres ofrecidos, en su orden.
+     * @param bool                                                                                 $toolsUnknown Viajaron herramientas y esta clase
+     *                                                                                                           no supo nombrarlas. NO es lo mismo que
+     *                                                                                                           no haber ofrecido ninguna.
+     * @param list<array{role: string, content: string}>                                           $messages     LO QUE VIAJÓ, no su tamaño. Los
+     *                                                                                                           turnos del stream son lo que la
+     *                                                                                                           sesión REGISTRÓ; esto es lo que
+     *                                                                                                           de verdad se mandó, y no siempre
+     *                                                                                                           coinciden — después de compactar,
+     *                                                                                                           la ventana lleva un resumen que
+     *                                                                                                           ningún turno contiene (greenhouse
+     *                                                                                                           decisions/0039).
+     * @param array<string, mixed>|null                                                            $omitted      Lo que alguien DECLARÓ haber
+     *                                                                                                           retenido. `null` es «nadie dijo»,
+     *                                                                                                           nunca «nada».
+     * @param list<array{role: string, content: string, class: value-of<WindowMessageClass>}>|null $window       The logical window declared by its
+     *                                                                                                           composer. It travels beside the
+     *                                                                                                           wire payload and never inside it.
      */
     private function __construct(
         public readonly string $endpoint,
@@ -56,17 +65,23 @@ final class ModelCallIntake
         public readonly ?string $system,
         public readonly array $messages,
         public readonly ?array $omitted,
+        public readonly ?array $window,
     ) {
     }
 
     /**
      * Lee la entrada del agente desde el cuerpo que viajó.
      *
-     * @param array<string, mixed>      $payload El cuerpo que viajó, decodificado.
-     * @param array<string, mixed>|null $omitted Lo que quien filtró haya declarado retener.
+     * @param array<string, mixed>                                                                 $payload El cuerpo que viajó, decodificado.
+     * @param array<string, mixed>|null                                                            $omitted Lo que quien filtró haya declarado retener.
+     * @param list<array{role: string, content: string, class: value-of<WindowMessageClass>}>|null $window  The composer-owned logical window, kept outside the provider payload.
      */
-    public static function fromChannelPayload(string $uri, array $payload, ?array $omitted = null): self
-    {
+    public static function fromChannelPayload(
+        string $uri,
+        array $payload,
+        ?array $omitted = null,
+        ?array $window = null,
+    ): self {
         $mensajes = [];
         $system = \is_string($payload['system'] ?? null) ? trim((string) $payload['system']) : null;
 
@@ -100,7 +115,7 @@ final class ModelCallIntake
 
         [$tools, $desconocidas] = self::leerTools($payload['tools'] ?? null);
 
-        return new self($uri, (string) ($payload['model'] ?? '?'), $tools, $desconocidas, $system, $mensajes, $omitted);
+        return new self($uri, (string) ($payload['model'] ?? '?'), $tools, $desconocidas, $system, $mensajes, $omitted, $window);
     }
 
     /**
@@ -158,7 +173,7 @@ final class ModelCallIntake
      */
     public function toPayload(): array
     {
-        return [
+        $payload = [
             'endpoint' => $this->endpoint,
             'model' => $this->model,
             'tools' => $this->tools,
@@ -167,5 +182,11 @@ final class ModelCallIntake
             'messages' => $this->messages,
             'omitted' => $this->omitted,
         ];
+
+        if ($this->window !== null) {
+            $payload['window'] = $this->window;
+        }
+
+        return $payload;
     }
 }
