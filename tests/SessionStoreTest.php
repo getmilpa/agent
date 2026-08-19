@@ -1056,4 +1056,90 @@ final class SessionStoreTest extends TestCase
         self::assertSame(1, $porId['t1']->bornInPlan, 'nació en la primera y ahí se queda');
         self::assertSame(2, $porId['t1']->planVersion, 'el último toque sí avanza');
     }
+
+    /** `loadAll()` devuelve cada sesión, idéntica a cargarla suelta, y con el orden de `ids()`. */
+    public function testLoadAllReturnsEverySessionEqualToLoadingEachById(): void
+    {
+        $almacen = $this->store();
+        $almacen->start('a', 'la primera');
+        $almacen->recordTurn('a', 'user', 'hola');
+        $almacen->start('b', 'la segunda');
+        $almacen->start('c', 'la tercera');
+        $almacen->recordTurn('c', 'assistant', 'listo');
+
+        $todas = $almacen->loadAll();
+
+        self::assertSame($almacen->ids(), array_keys($todas), 'las mismas ids, en el mismo orden que ids()');
+        foreach ($almacen->ids() as $id) {
+            self::assertEquals($almacen->load($id), $todas[$id], "loadAll()[$id] debe igualar a load($id)");
+        }
+    }
+
+    /**
+     * La propiedad que existe para arreglar: listar N sesiones lee el log UNA vez, no N.
+     *
+     * El instrumento es un almacén que cuenta lecturas. Su control positivo va incluido: el camino
+     * viejo —`load()` en un bucle— SÍ hace que el contador vea una lectura por sesión, así que un 1
+     * en el camino nuevo no es que el contador esté ciego.
+     */
+    public function testLoadAllReadsTheLogOnceWhereLoadingEachByIdReadsItPerSession(): void
+    {
+        $contador = new class (new InMemoryEventStore()) implements \Milpa\EventStore\EventStoreInterface {
+            public int $replay = 0;
+            public int $replayAll = 0;
+
+            public function __construct(private \Milpa\EventStore\EventStoreInterface $inner)
+            {
+            }
+
+            public function append(Event $e): void
+            {
+                $this->inner->append($e);
+            }
+
+            public function replay(string $streamId): array
+            {
+                ++$this->replay;
+
+                return $this->inner->replay($streamId);
+            }
+
+            public function nextSeq(): int
+            {
+                return $this->inner->nextSeq();
+            }
+
+            public function streams(): array
+            {
+                return $this->inner->streams();
+            }
+
+            public function replayAll(): array
+            {
+                ++$this->replayAll;
+
+                return $this->inner->replayAll();
+            }
+        };
+
+        $almacen = new SessionStore($contador);
+        $almacen->start('a', '1');
+        $almacen->start('b', '2');
+        $almacen->start('c', '3');
+
+        // CONTROL POSITIVO — el camino viejo: una sesión a la vez lee el log una vez POR sesión.
+        $contador->replay = 0;
+        $contador->replayAll = 0;
+        foreach ($almacen->ids() as $id) {
+            $almacen->load($id);
+        }
+        self::assertSame(3, $contador->replay, 'cargar una por una lee el log una vez por sesión (3)');
+
+        // EL CAMINO NUEVO: loadAll lee el log exactamente una vez, sin importar cuántas sesiones.
+        $contador->replay = 0;
+        $contador->replayAll = 0;
+        $almacen->loadAll();
+        self::assertSame(1, $contador->replayAll, 'loadAll lee el log exactamente una vez');
+        self::assertSame(0, $contador->replay, 'loadAll no cae en el replay-por-sesión');
+    }
 }

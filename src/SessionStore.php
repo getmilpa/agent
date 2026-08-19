@@ -140,6 +140,33 @@ final readonly class SessionStore
     }
 
     /**
+     * Cada sesión que este almacén conoce, reconstruida en UNA sola lectura del log.
+     *
+     * {@see self::load()} reproduce el stream de UNA sesión; llamarlo en un bucle sobre
+     * {@see self::ids()} lee el log entero una vez por sesión, lo que se vuelve cuadrático cuando hay
+     * muchas —el defecto que hacía colgarse a `/sessions`—. `loadAll()` lee el log una sola vez
+     * ({@see EventStoreInterface::replayAll()}) y reduce cada stream, así listar N sesiones cuesta una
+     * lectura y no N.
+     *
+     * @return array<string, Session> id de sesión → sesión, en el mismo orden que {@see self::ids()}
+     */
+    public function loadAll(): array
+    {
+        $sesiones = [];
+        $reducer = new SessionReducer();
+        foreach ($this->events->replayAll() as $stream => $eventos) {
+            if (!str_starts_with($stream, self::PREFIX) || $eventos === []) {
+                continue;
+            }
+
+            $id = substr($stream, \strlen(self::PREFIX));
+            $sesiones[$id] = $reducer->reduce($id, $eventos);
+        }
+
+        return $sesiones;
+    }
+
+    /**
      * Los identificadores de todas las sesiones que este almacén conoce.
      *
      * @return list<string>
