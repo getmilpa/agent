@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.20.0](https://github.com/getmilpa/agent/compare/v0.19.0...v0.20.0) (2026-08-19)
+
+
+### Features
+
+* a composition that lowers a ceiling is recorded as a fact ([#37](https://github.com/getmilpa/agent/issues/37)) ([4e5af0d](https://github.com/getmilpa/agent/commit/4e5af0d68d9a3eca009bf255286c108eb1ddee45))
+
 ## [0.19.0](https://github.com/getmilpa/agent/compare/v0.18.0...v0.19.0) (2026-08-18)
 
 
