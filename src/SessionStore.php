@@ -557,6 +557,35 @@ final readonly class SessionStore
     }
 
     /**
+     * Record that a composition LOWERED this call's ceiling — the receipt of greenhouse
+     * decisions/0059, so an Audit view can paint why authority was not required.
+     *
+     * It refuses an empty or malformed receipt: a composition that reduced nothing is not a fact
+     * worth a line, and a receipt with no operation or a non-list of reductions is a caller error the
+     * author must see, not a silent no-op that would fill the channel with «nothing happened».
+     *
+     * @param array{operation?: mixed, reductions?: mixed} $composition operation + the AxisReductions ProfileComposition rendered
+     */
+    public function recordCeilingComposition(string $id, array $composition): void
+    {
+        $operation = $composition['operation'] ?? null;
+        $reductions = $composition['reductions'] ?? null;
+        if (! \is_string($operation) || $operation === '' || ! \is_array($reductions) || ! array_is_list($reductions)) {
+            throw new \InvalidArgumentException(
+                'a ceiling composition must name its operation and carry a list of reductions; '
+                . 'a receipt without them is a caller error, not a fact',
+            );
+        }
+        if ($reductions === []) {
+            throw new \InvalidArgumentException(
+                'a composition that reduced nothing is not a fact worth recording — record only when a descent lowered the ceiling',
+            );
+        }
+
+        $this->append($id, SessionEvent::CeilingComposed, ['composition' => $composition]);
+    }
+
+    /**
      * Retirar una opción de la mesa de esta sesión.
      *
      * Se llama cuando una autoridad ya negó esa llamada: la negativa deja de ser un mensaje y pasa a

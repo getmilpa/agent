@@ -253,6 +253,10 @@ final readonly class SessionProjector
             // evidence/0254). Whoever needs it reads it from the fold, where its docblock says
             // what it is not.
             SessionEvent::OwnershipAsserted,
+            // A composition receipt is for the AUDIT surface (greenhouse decisions/0059,
+            // evidence/0240), not for the live agent transcript — this projector renders the
+            // conversation, and the receipt is read from the stream by render-audit instead.
+            SessionEvent::CeilingComposed,
             SessionEvent::ModelCalled,
             SessionEvent::Started,
             SessionEvent::Compacted,
