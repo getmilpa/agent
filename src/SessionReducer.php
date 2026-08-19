@@ -288,6 +288,11 @@ final readonly class SessionReducer
                 SessionEvent::SystemSet,
                 SessionEvent::OperationExecuted,
                 SessionEvent::EndedWithOpenWork, SessionEvent::TodosTransferred, SessionEvent::ModelCalled => null,
+                // A COMPOSITION DOES NOT CHANGE THE FOLD, and it is a decision the exhaustive match
+                // forces (greenhouse decisions/0059). What a session needs to CONTINUE — its goal,
+                // plan, pending work — does not move because a rehearsal descended a ceiling. The
+                // receipt exists for the human who AUDITS, and is read from the stream, not the state.
+                SessionEvent::CeilingComposed => null,
                 SessionEvent::Ended => $terminada = \is_string($p['because'] ?? null) ? $p['because'] : 'sin motivo',
             };
         }

@@ -264,5 +264,14 @@ enum SessionEvent: string
      */
     case OwnershipAsserted = 'session.ownership_asserted';
 
+    /**
+     * A composition LOWERED this call's ceiling, and the receipt says who lowered which axis
+     * (greenhouse decisions/0059). Recorded only when a descent actually reduced something, so the
+     * human who later asks why their agent did not have to ask them finds the answer in the stream,
+     * cited — not reconstructed. It carries the AxisReductions ProfileComposition rendered, never a
+     * trust grade (evidence/0254).
+     */
+    case CeilingComposed = 'session.ceiling_composed';
+
     case Ended = 'session.ended';
 }
