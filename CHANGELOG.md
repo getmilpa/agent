@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.21.0](https://github.com/getmilpa/agent/compare/v0.20.0...v0.21.0) (2026-08-19)
+
+
+### Features
+
+* SessionStore::loadAll() reconstructs every session in one log read ([cc29f28](https://github.com/getmilpa/agent/commit/cc29f28be1e2ca40c3bcb85f30731b0024a475d9))
+* SessionStore::loadAll() reconstructs every session in one log read ([989edd1](https://github.com/getmilpa/agent/commit/989edd1493cedbb15394523aad6fcb9fb89cbba4))
+
 ## [0.20.0](https://github.com/getmilpa/agent/compare/v0.19.0...v0.20.0) (2026-08-19)
 
 
