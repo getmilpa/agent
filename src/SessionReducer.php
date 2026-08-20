@@ -54,6 +54,8 @@ final readonly class SessionReducer
         $todos = [];
         /** @var list<string> $permisos */
         $permisos = [];
+        /** @var array<string, list<?array<string, mixed>>> $sobres operación → sobres, null = sí pelón */
+        $sobres = [];
         /** @var list<string> $retiradas */
         $retiradas = [];
 
@@ -249,8 +251,8 @@ final readonly class SessionReducer
                 // (greenhouse decisions/0056, evidence/0254). Earlier assertions stay in the
                 // stream; what this projection answers is who signed this session most recently.
                 SessionEvent::OwnershipAsserted => $ownership = $this->assertionFrom($p, $ownership),
-                SessionEvent::PermissionGranted => $permisos = $this->conPermiso($permisos, $p),
-                SessionEvent::PermissionRevoked => $permisos = $this->sinPermiso($permisos, $p),
+                SessionEvent::PermissionGranted => [$permisos, $sobres] = [$this->conPermiso($permisos, $p), $this->conSobre($sobres, $p)],
+                SessionEvent::PermissionRevoked => [$permisos, $sobres] = [$this->sinPermiso($permisos, $p), $this->sinSobre($sobres, $p)],
                 SessionEvent::ModeChanged => $mode = AutonomyMode::tryFrom(
                     \is_string($p['mode'] ?? null) ? $p['mode'] : '',
                 ) ?? $mode,
@@ -309,6 +311,7 @@ final readonly class SessionReducer
             mutations: $mutaciones,
             todos: array_values($todos),
             permissions: $permisos,
+            envelopes: $sobres,
             removedOptions: $retiradas,
             runFirst: $primero,
             obligationDeclared: $huboObligacion,
@@ -412,5 +415,50 @@ final readonly class SessionReducer
         $operacion = \is_string($payload['operation'] ?? null) ? $payload['operation'] : '';
 
         return array_values(array_filter($permisos, static fn (string $p): bool => $p !== $operacion));
+    }
+
+    /**
+     * Registra el SOBRE de este grant junto a los de la misma operación (greenhouse decisions/0067).
+     *
+     * `null` es un sí pelón; un stream anterior a los sobres trae sólo `operation` y cae ahí. Un
+     * sobre mal formado NO se convierte en sí: se ignora el grant entero, porque leer «sobre ilegible»
+     * como «sin cota» sería ensanchar por accidente exactamente lo que el sobre vino a acotar.
+     *
+     * @param array<string, list<?array<string, mixed>>> $sobres
+     * @param array<string, mixed>                       $payload
+     *
+     * @return array<string, list<?array<string, mixed>>>
+     */
+    private function conSobre(array $sobres, array $payload): array
+    {
+        $operacion = \is_string($payload['operation'] ?? null) ? $payload['operation'] : '';
+        if ($operacion === '') {
+            return $sobres;
+        }
+
+        $sobre = $payload['envelope'] ?? null;
+        if ($sobre !== null && !\is_array($sobre)) {
+            return $sobres;
+        }
+
+        $sobres[$operacion][] = $sobre;
+
+        return $sobres;
+    }
+
+    /**
+     * Revocar quita TODOS los sobres de la operación, pelones y apretados por igual.
+     *
+     * @param array<string, list<?array<string, mixed>>> $sobres
+     * @param array<string, mixed>                       $payload
+     *
+     * @return array<string, list<?array<string, mixed>>>
+     */
+    private function sinSobre(array $sobres, array $payload): array
+    {
+        $operacion = \is_string($payload['operation'] ?? null) ? $payload['operation'] : '';
+        unset($sobres[$operacion]);
+
+        return $sobres;
     }
 }

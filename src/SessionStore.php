@@ -671,9 +671,29 @@ final readonly class SessionStore
      * Por operación y por sesión, nunca global: «sí a `make`, en esta sesión» es una frase que alguien
      * puede evaluar. «Sí a lo que el agente decida» no lo es.
      */
-    public function grant(string $id, string $operation): void
+    /**
+     * Otorga esa operación — con un SOBRE, si el humano la apretó (greenhouse decisions/0067).
+     *
+     * Sin sobre es el sí pelón de siempre y el evento queda byte a byte como hoy. Con sobre, el
+     * permiso vale sólo para composiciones no-más-anchas que él; `$provenance` lleva lo que un auditor
+     * necesita para recomputar el meet: `base`, `requested`, `question`, `arguments_digest`, `by`.
+     *
+     * @param array<string, mixed>|null $envelope   `EffectProfile::toArray()` del sobre, o null
+     * @param array<string, mixed>      $provenance base/requested/question/arguments_digest/by
+     */
+    public function grant(string $id, string $operation, ?array $envelope = null, array $provenance = []): void
     {
-        $this->append($id, SessionEvent::PermissionGranted, ['operation' => $operation]);
+        $payload = ['operation' => $operation];
+        if ($envelope !== null) {
+            $payload['envelope'] = $envelope;
+            foreach (['base', 'requested', 'question', 'arguments_digest', 'by'] as $k) {
+                if (\array_key_exists($k, $provenance)) {
+                    $payload[$k] = $provenance[$k];
+                }
+            }
+        }
+
+        $this->append($id, SessionEvent::PermissionGranted, $payload);
     }
 
     /** Retira ese permiso — apendando encima, sin borrar que se otorgó (P16.5). */

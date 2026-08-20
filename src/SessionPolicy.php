@@ -46,6 +46,12 @@ final readonly class SessionPolicy
         bool $mutating,
         bool $requiresSignature,
         ?AutonomyMode $ceiling = null,
+        // EL PERFIL COMPUESTO DE ESTA LLAMADA, para juzgarla contra el SOBRE de un grant apretado
+        // (greenhouse decisions/0067). Opcional porque un sí pelón (sobre null) admite sin mirarlo;
+        // bajo un sobre, `null` significa «sin clasificar» y lo no clasificado nunca viaja en un
+        // apretón. La policy es el ÚNICO juez: compara aquí, con el único comparador, y en ningún
+        // otro lado — un segundo comparador en la compuerta sería un segundo juez.
+        ?\Milpa\Command\Effect\EffectProfile $composed = null,
     ): PolicyDecision {
         // FALLA CERRADO si la sesión tiene padre y nadie trajo su techo.
         //
@@ -74,7 +80,7 @@ final readonly class SessionPolicy
             return PolicyDecision::Allow;
         }
 
-        if ($session->allows($operation)) {
+        if ($session->allows($operation, $composed)) {
             return PolicyDecision::Allow;
         }
 

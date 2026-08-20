@@ -111,6 +111,15 @@ final readonly class Session
          * @var array<string, mixed>|null
          */
         private ?array $ownershipAssertion = null,
+        /**
+         * Los SOBRES de cada permiso: operación → lista de sobres, uno por grant (greenhouse
+         * decisions/0067). `null` es un sí pelón (sin cota dentro del techo); un arreglo es el
+         * `EffectProfile::toArray()` de un apretón. Va aparte de `$permissions` a propósito: esa lista
+         * de nombres la leen el resumidor, la TUI y `agent:show`, y un sobre no es un nombre.
+         *
+         * @var array<string, list<?array<string, mixed>>>
+         */
+        public array $envelopes = [],
     ) {
     }
 
@@ -264,10 +273,36 @@ final readonly class Session
         return $this->ownershipAssertion;
     }
 
-    /** Si esta sesión ya tiene consentida esa operación. */
-    public function allows(string $operation): bool
+    /**
+     * Si esta sesión ya tiene consentida esa operación — para ESTA composición, si el grant lleva sobre.
+     *
+     * Un `sí` pelón deja un sobre `null`: sin cota dentro del techo declarado, admite cualquier
+     * composición, como siempre. Una contraoferta ESTRUCTURAL deja un sobre (greenhouse
+     * decisions/0067), y entonces una llamada sólo queda admitida si su perfil COMPUESTO es no-más-
+     * ancho que ese sobre en las cinco hachas — el único comparador, `isNoWiderThan`. Sin composición
+     * no hay admisión bajo un sobre: lo no clasificado nunca viaja en un apretón.
+     *
+     * Varios grants de la misma operación coexisten; cualquiera que cubra, admite. Un `sí` al lado de
+     * un sobre sigue admitiendo todo: apretar un sí ya dado es revocar y apretar.
+     */
+    public function allows(string $operation, ?\Milpa\Command\Effect\EffectProfile $composed = null): bool
     {
-        return \in_array($operation, $this->permissions, true);
+        if (!\in_array($operation, $this->permissions, true)) {
+            return false;
+        }
+
+        // Sin sobres registrados para la operación (stream anterior a los sobres): un sí pelón.
+        $sobres = $this->envelopes[$operation] ?? [null];
+        foreach ($sobres as $sobre) {
+            if ($sobre === null) {
+                return true;
+            }
+            if ($composed !== null && $composed->isNoWiderThan(\Milpa\Command\Effect\EffectProfile::fromArray($sobre))) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
