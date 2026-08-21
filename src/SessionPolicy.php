@@ -52,6 +52,11 @@ final readonly class SessionPolicy
         // apretón. La policy es el ÚNICO juez: compara aquí, con el único comparador, y en ningún
         // otro lado — un segundo comparador en la compuerta sería un segundo juez.
         ?\Milpa\Command\Effect\EffectProfile $composed = null,
+        // LA COMPOSICIÓN ENTERA, con sus reducciones, para el bypass de ENSAYO (greenhouse
+        // decisions/0068, 0069): saber que un `Ephemeral` lo produjo un trial workspace —y no una
+        // operación que escribe temporales— se lee de QUIÉN lo bajó, no del perfil efectivo solo. Un
+        // `bool confinado` desde la compuerta haría de ella un segundo juez; la composición, no.
+        ?\Milpa\Command\Effect\ProfileComposition $composition = null,
     ): PolicyDecision {
         // FALLA CERRADO si la sesión tiene padre y nadie trajo su techo.
         //
@@ -80,6 +85,24 @@ final readonly class SessionPolicy
             return PolicyDecision::Allow;
         }
 
+        // EL ENSAYO NO PIDE PERMISO — cuando sus efectos caben ENTEROS en el techo de ensayo Y están
+        // confinados a un TrialWorkspace (greenhouse decisions/0068). No «los ensayos no piden
+        // permiso»: `Ephemeral` solo no basta, porque `ephemeral` + `third_party` es mandar correos
+        // desde una copia desechable — el filesystem es desechable, el correo no. Por eso el bypass
+        // es `perfil efectivo ≤ techo de ensayo AND confinado`, y «confinado» se lee de la
+        // COMPOSICIÓN (quién produjo el Ephemeral), nunca del perfil solo. Va DESPUÉS de la firma —
+        // que no se salta— y ANTES de los permisos y del modo: el modo de sesión no es la perilla
+        // (la UX no legisla riesgo); la misma operación en el mismo workspace tiene el mismo techo
+        // esté la sesión en `ask` o en `auto`.
+        if (
+            $composition !== null
+            && $composed !== null
+            && $composition->confinedByTrial()
+            && $composed->isNoWiderThan(self::trialCeiling())
+        ) {
+            return PolicyDecision::Allow;
+        }
+
         if ($session->allows($operation, $composed)) {
             return PolicyDecision::Allow;
         }
@@ -91,6 +114,25 @@ final readonly class SessionPolicy
         return $efectivo->pausesBeforeMutation()
             ? PolicyDecision::AskPermission
             : PolicyDecision::Allow;
+    }
+
+    /**
+     * El techo de ENSAYO: lo más que una llamada confinada puede ser sin pedir permiso (decisions/0069).
+     *
+     * Conservador a propósito, y nada que un humano haya clickeado: `mutation` a lo sumo Ephemeral
+     * (lo que escribe muere con el workspace), `externality` EXACTAMENTE None (nada sale),
+     * `authority` a lo sumo WriteAsUser (ningún ensayo privilegiado sin preguntar); reversibilidad y
+     * sujeto sin restricción — la copia se descarta de todos modos. Se ajusta sólo por acta.
+     */
+    public static function trialCeiling(): \Milpa\Command\Effect\EffectProfile
+    {
+        return new \Milpa\Command\Effect\EffectProfile(
+            \Milpa\Command\Effect\Mutation::Ephemeral,
+            \Milpa\Command\Effect\Externality::None,
+            \Milpa\Command\Effect\Reversibility::Unknown,
+            \Milpa\Command\Effect\Authority::WriteAsUser,
+            subject: \Milpa\Command\Effect\Subject::Unknown,
+        );
     }
 
     /**

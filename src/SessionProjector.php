@@ -257,6 +257,11 @@ final readonly class SessionProjector
             // evidence/0240), not for the live agent transcript — this projector renders the
             // conversation, and the receipt is read from the stream by render-audit instead.
             SessionEvent::CeilingComposed,
+            // Trial facts (greenhouse decisions/0069) are audit material too: what ran in a copy, what
+            // was promoted, what was discarded — read from the stream, not painted in the transcript.
+            SessionEvent::TrialRunRecorded,
+            SessionEvent::TrialPromoted,
+            SessionEvent::TrialDiscarded,
             SessionEvent::ModelCalled,
             SessionEvent::Started,
             SessionEvent::Compacted,
