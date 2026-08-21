@@ -273,5 +273,24 @@ enum SessionEvent: string
      */
     case CeilingComposed = 'session.ceiling_composed';
 
+    /**
+     * An operation ran in a disposable TRIAL WORKSPACE, not on the host (greenhouse decisions/0068,
+     * 0069): which workspace, which call (arguments digest), the bounds the runner IMPOSED, the exit
+     * code, and the REPORT — the diff the HOST computed over the copy. The host tree did not change;
+     * only `session.trial_promoted` can change it. The trial is a producer of evidence, and this is
+     * the evidence.
+     */
+    case TrialRunRecorded = 'session.trial_run_recorded';
+
+    /**
+     * Effects observed in a trial workspace were INTRODUCED into the host — by `sandbox:promote`,
+     * through the ordinary gate, consented by a human. The human did not authorise the trial after
+     * the fact; they authorised these paths entering the house.
+     */
+    case TrialPromoted = 'session.trial_promoted';
+
+    /** A trial workspace was discarded: its writes died with it, as the contract said they would. */
+    case TrialDiscarded = 'session.trial_discarded';
+
     case Ended = 'session.ended';
 }

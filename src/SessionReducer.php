@@ -295,6 +295,10 @@ final readonly class SessionReducer
                 // plan, pending work — does not move because a rehearsal descended a ceiling. The
                 // receipt exists for the human who AUDITS, and is read from the stream, not the state.
                 SessionEvent::CeilingComposed => null,
+                // THE TRIAL FACTS DO NOT MOVE THE FOLD EITHER (greenhouse decisions/0069): a run in a
+                // disposable workspace, its promotion, its discard — all are evidence for the human
+                // who audits, read from the stream; none changes what the session IS.
+                SessionEvent::TrialRunRecorded, SessionEvent::TrialPromoted, SessionEvent::TrialDiscarded => null,
                 SessionEvent::Ended => $terminada = \is_string($p['because'] ?? null) ? $p['because'] : 'sin motivo',
             };
         }

@@ -613,6 +613,55 @@ final readonly class SessionStore
     }
 
     /**
+     * Graba que una operación corrió en un TRIAL WORKSPACE, con su reporte (greenhouse decisions/0069).
+     *
+     * El hecho nombra el workspace, la llamada exacta (digest), las cotas que el runner IMPUSO, el
+     * código de salida y el REPORTE — el diff que el HOST calculó sobre la copia. Sin workspace u
+     * operación no es un hecho: es un error de quien llama, y se rechaza en vez de apendarse a medias.
+     *
+     * @param array<string, mixed> $run workspace, operation, arguments_digest, bounds, exit, report, output_digest
+     */
+    public function recordTrialRun(string $id, array $run): void
+    {
+        if (!\is_string($run['workspace'] ?? null) || $run['workspace'] === '' || !\is_string($run['operation'] ?? null) || $run['operation'] === '') {
+            throw new \InvalidArgumentException('a trial run names its workspace and its operation; without them it is not a fact');
+        }
+        if (!\is_array($run['report'] ?? null)) {
+            throw new \InvalidArgumentException('a trial run carries its report — the diff the host computed — even when empty');
+        }
+
+        $this->append($id, SessionEvent::TrialRunRecorded, $run);
+    }
+
+    /**
+     * Graba que efectos observados en un trial workspace ENTRARON al host — por `sandbox:promote`.
+     *
+     * @param array<string, mixed> $promotion workspace, paths, diff_digest, by
+     */
+    public function recordTrialPromotion(string $id, array $promotion): void
+    {
+        if (!\is_string($promotion['workspace'] ?? null) || $promotion['workspace'] === '' || !\is_array($promotion['paths'] ?? null)) {
+            throw new \InvalidArgumentException('a promotion names its workspace and the paths it introduced');
+        }
+
+        $this->append($id, SessionEvent::TrialPromoted, $promotion);
+    }
+
+    /**
+     * Graba que un trial workspace se descartó: sus escrituras murieron con él.
+     *
+     * @param array<string, mixed> $discard workspace
+     */
+    public function recordTrialDiscard(string $id, array $discard): void
+    {
+        if (!\is_string($discard['workspace'] ?? null) || $discard['workspace'] === '') {
+            throw new \InvalidArgumentException('a discard names its workspace');
+        }
+
+        $this->append($id, SessionEvent::TrialDiscarded, $discard);
+    }
+
+    /**
      * Retirar una opción de la mesa de esta sesión.
      *
      * Se llama cuando una autoridad ya negó esa llamada: la negativa deja de ser un mensaje y pasa a
