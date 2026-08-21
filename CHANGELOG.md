@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.22.0](https://github.com/getmilpa/agent/compare/v0.21.0...v0.22.0) (2026-08-21)
+
+
+### ⚠ BREAKING CHANGES
+
+* milpa/agent now depends on milpa/command (>=0.17) so the comparison happens in one place; Session gains a named ctor parameter.
+
+### Features
+
+* a grant carries an envelope; allows() and decide() judge the composed call against it ([72cbc88](https://github.com/getmilpa/agent/commit/72cbc888d3e4259cc098c1afd69ae06771973af9))
+
 ## [0.21.0](https://github.com/getmilpa/agent/compare/v0.20.0...v0.21.0) (2026-08-19)
 
 
