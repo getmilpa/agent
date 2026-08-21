@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.23.0](https://github.com/getmilpa/agent/compare/v0.22.0...v0.23.0) (2026-08-21)
+
+
+### Features
+
+* a trial runs without consent when its composed profile fits the trial ceiling AND is confined ([#43](https://github.com/getmilpa/agent/issues/43)) ([afcfaa1](https://github.com/getmilpa/agent/commit/afcfaa16e151045c098ef29c8c4f60328dffe7c3))
+
 ## [0.22.0](https://github.com/getmilpa/agent/compare/v0.21.0...v0.22.0) (2026-08-21)
 
 
