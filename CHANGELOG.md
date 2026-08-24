@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.26.0](https://github.com/getmilpa/agent/compare/v0.25.0...v0.26.0) (2026-08-24)
+
+
+### Features
+
+* **store:** SessionStore::stream exposes raw events for the board's per-turn fold; retire the per-event operation card ([#49](https://github.com/getmilpa/agent/issues/49)) ([9b20f98](https://github.com/getmilpa/agent/commit/9b20f98a300ba80e9ff3f82491f4165ee6d3bdbc))
+
 ## [0.25.0](https://github.com/getmilpa/agent/compare/v0.24.0...v0.25.0) (2026-08-24)
 
 
