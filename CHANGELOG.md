@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.24.0](https://github.com/getmilpa/agent/compare/v0.23.0...v0.24.0) (2026-08-24)
+
+
+### Features
+
+* **projector:** the executed operation is itself a board card — the board stops costing the agent attention ([#45](https://github.com/getmilpa/agent/issues/45)) ([04b38a7](https://github.com/getmilpa/agent/commit/04b38a7f97e8409937e6e65f69369e9657243eba))
+
 ## [0.23.0](https://github.com/getmilpa/agent/compare/v0.22.0...v0.23.0) (2026-08-21)
 
 
