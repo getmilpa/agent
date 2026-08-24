@@ -57,6 +57,73 @@ final class SessionProjectorTest extends TestCase
         self::assertSame(2, $tarjetas[1]['card']['version']);
     }
 
+    public function testTheWorkTheAgentAlreadyDoesBecomesABoardCard(): void
+    {
+        // THE ROOT OF greenhouse evidence/0227: a card required the agent to CALL todo — extra work for
+        // the model, the tax Milpa keeps removing (mutating runs scored 18% vs 53%). A governed
+        // operation the agent already runs must itself be a card, so the board shows real work with no
+        // ceremonial narration. «A view that needs work to announce itself observes operator discipline,
+        // not work» (greenhouse, Rod).
+        $eventos = new InMemoryEventStore();
+        $almacen = new SessionStore($eventos);
+        $almacen->start('s1', 'x');
+        $almacen->recordExecution('s1', 'plugins:register', null, 'agent', null, 'abc123');
+
+        $pintables = (new SessionProjector())->projectAll($eventos->replay('agent-session:s1'));
+        $tarjetas = array_values(array_filter($pintables, static fn (array $x): bool => $x['kind'] === 'card'));
+
+        self::assertCount(1, $tarjetas, 'the executed operation is itself a card — no todo call needed');
+        self::assertSame('plugins:register', $tarjetas[0]['card']['text'], 'the card cites the operation from the stream');
+        self::assertSame('done', $tarjetas[0]['card']['to'], 'an executed operation is work done');
+        self::assertSame('operation', $tarjetas[0]['card']['origin'], 'and it names the fact it derived from');
+        self::assertNull($tarjetas[0]['card']['from'], 'no invented prior state');
+    }
+
+    public function testTheBoardIsNonEmptyFromRealWorkWithZeroTodoCalls(): void
+    {
+        // The small property (greenhouse, Rod): TodoChanged = 0, operations > 0 -> board non-empty,
+        // cards cite stream facts, no invented state. This kills the root of 0227.
+        $eventos = new InMemoryEventStore();
+        $almacen = new SessionStore($eventos);
+        $almacen->start('s1', 'x');
+        $almacen->recordExecution('s1', 'plugins:list', null, 'agent', null, 'd1');
+        $almacen->recordExecution('s1', 'make', null, 'agent', null, 'd2');
+        $almacen->recordExecution('s1', 'plugins:register', null, 'agent', null, 'd3');
+
+        $stream = $eventos->replay('agent-session:s1');
+        $pintables = (new SessionProjector())->projectAll($stream);
+        $tarjetas = array_values(array_filter($pintables, static fn (array $x): bool => $x['kind'] === 'card'));
+        $todos = array_filter($stream, static fn ($e): bool => $e->type === 'session.todo_changed');
+
+        self::assertCount(0, $todos, 'the agent narrated nothing to the board');
+        self::assertNotEmpty($tarjetas, 'yet the board shows the work it actually did');
+        self::assertSame(
+            ['plugins:list', 'make', 'plugins:register'],
+            array_map(static fn (array $t): string => $t['card']['text'], $tarjetas),
+            'each card cites the operation the stream already recorded',
+        );
+    }
+
+    public function testTheExplicitTodoCardSurvives(): void
+    {
+        // POSITIVE CONTROL (Rod): operation_executed loses its MONOPOLY on the board, not the todo its
+        // capability. A run that DOES call todo still shows the explicit card, beside the derived ones.
+        $eventos = new InMemoryEventStore();
+        $almacen = new SessionStore($eventos);
+        $almacen->start('s1', 'x');
+        $almacen->recordExecution('s1', 'make', null, 'agent', null, 'd1');
+        $almacen->setTodo('s1', new Todo('t1', 'ship it', TodoStatus::Done));
+
+        $pintables = (new SessionProjector())->projectAll($eventos->replay('agent-session:s1'));
+        $tarjetas = array_values(array_filter($pintables, static fn (array $x): bool => $x['kind'] === 'card'));
+        $textos = array_map(static fn (array $t): string => $t['card']['text'], $tarjetas);
+        $porOrigen = array_map(static fn (array $t): ?string => $t['card']['origin'] ?? null, $tarjetas);
+
+        self::assertContains('make', $textos, 'the derived operation card is there');
+        self::assertContains('ship it', $textos, 'and the explicit todo card still is too');
+        self::assertContains('operation', $porOrigen, 'the derived one names its source');
+    }
+
     /**
      * Lo que no cambia lo que se ve devuelve `null`, y eso es una afirmación.
      *
