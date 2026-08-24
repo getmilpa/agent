@@ -316,6 +316,7 @@ final readonly class SessionProjector
     {
         $sesion = '';
         $turnSeq = null;
+        $ultimoTurno = null;
         $turnCards = [];
         $todoCards = [];
         foreach ($events as $event) {
@@ -331,16 +332,21 @@ final readonly class SessionProjector
             $p = $event->payload;
 
             if ($tipo === SessionEvent::Turn) {
-                if (($p['role'] ?? null) === 'assistant') {
-                    $turnSeq = $event->seq;
-                }
+                // ANY turn opens a work cycle, not only an assistant one. A real agent loop records a
+                // USER turn, then its work (tools/operations), then the ASSISTANT response — the work
+                // lives BETWEEN a user turn and the assistant turn that closes it. Keying only on
+                // assistant turns lost every real run's cards (greenhouse evidence/0287, caught by the
+                // pin's method: a live model, not a hand-seeded stream where the assistant turn is
+                // written first). The cycle a card belongs to is the last turn opened before its work.
+                $turnSeq = $event->seq;
+                $ultimoTurno = $event->seq;
 
                 continue;
             }
 
             if ($tipo === SessionEvent::ToolCalled || $tipo === SessionEvent::OperationExecuted) {
                 if ($turnSeq === null) {
-                    continue; // work before any assistant turn belongs to no turn card
+                    continue; // work before any turn belongs to no cycle
                 }
                 $esOperacion = $tipo === SessionEvent::OperationExecuted;
                 $nombre = $esOperacion
@@ -379,6 +385,14 @@ final readonly class SessionProjector
                 ];
             }
         }
+
+        // A cycle is `doing` while it is the last turn opened (the agent is still in it); once a later
+        // turn exists — the assistant's response, or the next user message — the work it held is `done`.
+        // Derived from stream order alone, never asked of the agent.
+        foreach ($turnCards as &$carta) {
+            $carta['card']['to'] = ($carta['at'] === $ultimoTurno) ? 'doing' : 'done';
+        }
+        unset($carta);
 
         return array_values(array_merge($turnCards, $todoCards));
     }
