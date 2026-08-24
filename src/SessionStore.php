@@ -140,6 +140,18 @@ final readonly class SessionStore
     }
 
     /**
+     * The raw events of one session, in order — for a fold a reduced {@see Session} cannot express,
+     * like the board's per-turn cards (greenhouse evidence/0286). Where {@see load()} reduces the
+     * stream to state, this returns the stream itself, untranslated, for a projector to fold its way.
+     *
+     * @return list<Event>
+     */
+    public function stream(string $id): array
+    {
+        return $this->events->replay(self::PREFIX . $id);
+    }
+
+    /**
      * Cada sesión que este almacén conoce, reconstruida en UNA sola lectura del log.
      *
      * {@see self::load()} reproduce el stream de UNA sesión; llamarlo en un bucle sobre
