@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.25.0](https://github.com/getmilpa/agent/compare/v0.24.0...v0.25.0) (2026-08-24)
+
+
+### Features
+
+* **projector:** the board's unit of work is the assistant turn — boardCards folds the stream into one card per turn ([#47](https://github.com/getmilpa/agent/issues/47)) ([1a1a1d9](https://github.com/getmilpa/agent/commit/1a1a1d98f7b842fe454aab6f93ff97176a67ade3))
+
 ## [0.24.0](https://github.com/getmilpa/agent/compare/v0.23.0...v0.24.0) (2026-08-24)
 
 
