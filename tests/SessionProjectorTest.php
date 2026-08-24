@@ -95,6 +95,40 @@ final class SessionProjectorTest extends TestCase
         self::assertTrue($cards[0]['card']['mutated'], 'a governed operation ran: this turn touched the world');
     }
 
+    public function testTheWorkBetweenAUserTurnAndTheAssistantResponseIsOneDoneCard(): void
+    {
+        // greenhouse evidence/0287: a REAL agent loop records user turn -> work -> assistant response.
+        // The work lives BEFORE the assistant turn; a live llama run caught what the hand-seeded tests
+        // could not (the pin's method). The finished cycle is one `done` card.
+        $eventos = new InMemoryEventStore();
+        $almacen = new SessionStore($eventos);
+        $almacen->start('s1', 'x');
+        $almacen->recordTurn('s1', 'user', 'inspecciona los plugins');
+        foreach (['plugins_list', 'plugins_show', 'plugins_verify'] as $t) {
+            $almacen->recordToolCall('s1', $t, [], 'ok');
+        }
+        $almacen->recordTurn('s1', 'assistant', 'listos'); // the response closes the cycle
+
+        $cards = (new SessionProjector())->boardCards($eventos->replay('agent-session:s1'));
+
+        self::assertCount(1, $cards, 'the work between a user turn and the response is one card');
+        self::assertCount(3, $cards[0]['card']['operations'], 'and it holds the work done in that cycle');
+        self::assertSame('done', $cards[0]['card']['to'], 'the assistant answered: the cycle is done');
+    }
+
+    public function testTheOpenCycleWithNoResponseYetIsDoing(): void
+    {
+        $eventos = new InMemoryEventStore();
+        $almacen = new SessionStore($eventos);
+        $almacen->start('s1', 'x');
+        $almacen->recordTurn('s1', 'user', 'hazlo');
+        $almacen->recordToolCall('s1', 'make', [], 'ok');
+
+        $cards = (new SessionProjector())->boardCards($eventos->replay('agent-session:s1'));
+
+        self::assertSame('doing', $cards[0]['card']['to'], 'no response yet: the cycle is still doing');
+    }
+
     public function testTheExplicitTodoCardStillAppearsBesideTurnCards(): void
     {
         // POSITIVE CONTROL (Rod): the todo lost the MONOPOLY on the board, not the capability.
