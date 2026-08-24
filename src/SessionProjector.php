@@ -224,6 +224,31 @@ final readonly class SessionProjector
                     'detailWhy' => \is_string($p['reason']['message'] ?? null) ? $p['reason']['message'] : null,
                 ],
             ],
+            // ── THE EXECUTED OPERATION IS ITSELF A BOARD CARD (greenhouse evidence/0227, 0284) ──────
+            //
+            // The board's cards used to be born ONLY from `TodoChanged` — the agent had to CALL `todo`
+            // to move a card. That made the board observe operator discipline, not work: a view that
+            // needs the work to announce itself is not observing the work. And it taxed the model —
+            // «do the work AND keep my representation of the work» — the very tax Milpa keeps removing.
+            //
+            // So the governed operation the agent ALREADY runs projects a card, derived only from facts
+            // the stream already holds: the operation name it ran, and the seq that identifies this
+            // execution. It is done because it executed. `TodoChanged` keeps its explicit card — it
+            // lost the monopoly, not the capability. This surface still «projects once, each surface
+            // filters»: the board reads `card`, the live transcript reads the `activity` above.
+            SessionEvent::OperationExecuted => [
+                ...$base,
+                'kind' => 'card',
+                'card' => [
+                    'id' => 'op:' . $event->seq,
+                    'text' => \is_string($p['operation'] ?? null) ? $p['operation'] : '',
+                    'to' => 'done',
+                    'from' => null,
+                    'version' => 1,
+                    'origin' => 'operation',
+                    'inheritedFrom' => null,
+                ],
+            ],
             // ── LA ENTRADA NO SE PROYECTA AQUI, Y ES UNA DECISION ───────────────────────────
             //
             // Esta es la vista del HUMANO en vivo: lo que esta pasando y lo que espera respuesta. La
@@ -233,15 +258,6 @@ final readonly class SessionProjector
             //
             // No es que se pierda: vive en el stream y la superficie de desarrollador la lee de ahi.
             // Que el humano pueda verla NO exige que la vea siempre.
-            // ── THE FACT OF AN EXECUTION IS NOT PAINTED HERE EITHER, AND THAT IS ALSO A DECISION ──
-            //
-            // The live human ALREADY saw the call and its result; telling them it also happened would
-            // be two lines for one fact. This event does not exist for them — it exists for whoever
-            // asks, a year from now, WHY this operation acquired the right to run, and that reader is
-            // not watching the screen while it happens.
-            //
-            // Not painting it is NOT hiding it: it lives in the stream, which is where an audit looks.
-            SessionEvent::OperationExecuted,
             // EL `system` NO SE PINTA. Es la ENTRADA del agente, igual que `ModelCalled`, y quien mira
             // la pantalla está viendo lo que pasó, no lo que se mandó. Pintarlo metería en la corrida
             // un renglón de kilobytes que nadie pidió, cada vez que alguien toca la configuración.
