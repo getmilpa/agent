@@ -124,6 +124,61 @@ final class SessionProjectorTest extends TestCase
         self::assertContains('operation', $porOrigen, 'the derived one names its source');
     }
 
+    public function testOneCardPerAssistantTurnCollapsesTheBurst(): void
+    {
+        // greenhouse evidence/0285: measured on a real workday stream, ONE assistant turn did
+        // plugins_list + 3x plugins_show + capabilities + 3x plugins_verify — 8 tool calls, one unit of
+        // work («verificar plugins instalados»). The work unit is the turn, read from stream order,
+        // with zero agent narration. Eight facts, one card.
+        $eventos = new InMemoryEventStore();
+        $almacen = new SessionStore($eventos);
+        $almacen->start('s1', 'x');
+        $almacen->recordTurn('s1', 'user', 'inspecciona los plugins');
+        $almacen->recordTurn('s1', 'assistant', 'voy');
+        foreach (['plugins_list', 'plugins_show', 'plugins_show', 'plugins_show', 'capabilities', 'plugins_verify', 'plugins_verify', 'plugins_verify'] as $t) {
+            $almacen->recordToolCall('s1', $t, [], 'ok');
+        }
+
+        $cards = (new SessionProjector())->boardCards($eventos->replay('agent-session:s1'));
+
+        self::assertCount(1, $cards, 'eight tool calls in one turn are ONE card, not eight');
+        self::assertCount(8, $cards[0]['card']['operations'], 'and the card cites the eight facts it collapsed');
+        self::assertSame('turn', $cards[0]['card']['origin'], 'derived from the turn, a fact the runtime writes');
+        self::assertFalse($cards[0]['card']['mutated'], 'a turn of reads did not touch the world');
+    }
+
+    public function testATurnThatRunsAGovernedOperationIsMarkedMutated(): void
+    {
+        $eventos = new InMemoryEventStore();
+        $almacen = new SessionStore($eventos);
+        $almacen->start('s1', 'x');
+        $almacen->recordTurn('s1', 'assistant', 'voy');
+        $almacen->recordToolCall('s1', 'capabilities_refresh', [], 'ok', true, true);
+        $almacen->recordExecution('s1', 'capabilities.refresh', null, 'agent', null, 'd1');
+
+        $cards = (new SessionProjector())->boardCards($eventos->replay('agent-session:s1'));
+
+        self::assertCount(1, $cards, 'one turn, one card');
+        self::assertTrue($cards[0]['card']['mutated'], 'a governed operation ran: this turn touched the world');
+    }
+
+    public function testTheExplicitTodoCardStillAppearsBesideTurnCards(): void
+    {
+        // POSITIVE CONTROL (Rod): the todo lost the MONOPOLY on the board, not the capability.
+        $eventos = new InMemoryEventStore();
+        $almacen = new SessionStore($eventos);
+        $almacen->start('s1', 'x');
+        $almacen->recordTurn('s1', 'assistant', 'voy');
+        $almacen->recordToolCall('s1', 'make', [], 'ok');
+        $almacen->setTodo('s1', new Todo('t1', 'ship it', TodoStatus::Done));
+
+        $cards = (new SessionProjector())->boardCards($eventos->replay('agent-session:s1'));
+        $origenes = array_map(static fn (array $c): ?string => $c['card']['origin'] ?? null, $cards);
+
+        self::assertContains('turn', $origenes, 'the derived turn card is there');
+        self::assertContains('todo', $origenes, 'and the explicit todo card still is too');
+    }
+
     /**
      * Lo que no cambia lo que se ve devuelve `null`, y eso es una afirmación.
      *

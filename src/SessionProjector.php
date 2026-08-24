@@ -311,4 +311,91 @@ final readonly class SessionProjector
 
         return $salida;
     }
+
+    /**
+     * The board as a FOLD, not a per-event projection: one card per assistant turn, aggregating the
+     * work that turn did — the operations and tool calls the runtime already recorded between it and
+     * the next turn — with `mutated` true when a governed operation ran. The work unit is the turn
+     * (greenhouse evidence/0285), read from stream ORDER, with zero agent narration: eight tool calls
+     * in one turn are one card, not eight. Explicit `TodoChanged` cards keep their place beside the
+     * derived ones — the todo lost the monopoly on the board, not the capability.
+     *
+     * This is a divergent translation of the same stream {@see project()} renders per-event for the
+     * transcript. That is deliberate: the board and the transcript are two views of one stream, and
+     * two translations of one stream diverge, so the board folds where the transcript maps.
+     *
+     * @param list<\Milpa\EventStore\Event> $events
+     *
+     * @return list<array{session: string, kind: string, at: int, card: array<string, mixed>}>
+     */
+    public function boardCards(array $events): array
+    {
+        $sesion = '';
+        $turnSeq = null;
+        $turnCards = [];
+        $todoCards = [];
+        foreach ($events as $event) {
+            $tipo = SessionEvent::tryFrom($event->type);
+            if ($tipo === null) {
+                continue;
+            }
+            if ($sesion === '') {
+                $sesion = str_starts_with($event->streamId, SessionStore::PREFIX)
+                    ? substr($event->streamId, \strlen(SessionStore::PREFIX))
+                    : $event->streamId;
+            }
+            $p = $event->payload;
+
+            if ($tipo === SessionEvent::Turn) {
+                if (($p['role'] ?? null) === 'assistant') {
+                    $turnSeq = $event->seq;
+                }
+
+                continue;
+            }
+
+            if ($tipo === SessionEvent::ToolCalled || $tipo === SessionEvent::OperationExecuted) {
+                if ($turnSeq === null) {
+                    continue; // work before any assistant turn belongs to no turn card
+                }
+                $esOperacion = $tipo === SessionEvent::OperationExecuted;
+                $nombre = $esOperacion
+                    ? (\is_string($p['operation'] ?? null) ? $p['operation'] : '?')
+                    : (\is_string($p['tool'] ?? null) ? $p['tool'] : '?');
+                $muta = $esOperacion || ($p['mutating'] ?? false) === true;
+                $clave = 'turn:' . $turnSeq;
+                if (! isset($turnCards[$clave])) {
+                    $turnCards[$clave] = [
+                        'session' => $sesion,
+                        'kind' => 'card',
+                        'at' => $turnSeq,
+                        'card' => ['id' => $clave, 'operations' => [], 'mutated' => false, 'text' => '', 'to' => 'done', 'from' => null, 'origin' => 'turn'],
+                    ];
+                }
+                $turnCards[$clave]['card']['operations'][] = $nombre;
+                $turnCards[$clave]['card']['mutated'] = $turnCards[$clave]['card']['mutated'] || $muta;
+                $turnCards[$clave]['card']['text'] = implode(' · ', $turnCards[$clave]['card']['operations']);
+
+                continue;
+            }
+
+            if ($tipo === SessionEvent::TodoChanged) {
+                $id = \is_string($p['id'] ?? null) ? $p['id'] : '';
+                $todoCards[$id] = [
+                    'session' => $sesion,
+                    'kind' => 'card',
+                    'at' => $event->seq,
+                    'card' => [
+                        'id' => $id,
+                        'text' => \is_string($p['text'] ?? null) ? $p['text'] : '',
+                        'to' => \is_string($p['status'] ?? null) ? $p['status'] : '',
+                        'from' => \is_string($p['from'] ?? null) ? $p['from'] : null,
+                        'origin' => 'todo',
+                    ],
+                ];
+            }
+        }
+
+        return array_values(array_merge($turnCards, $todoCards));
+    }
 }
