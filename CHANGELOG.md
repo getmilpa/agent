@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.26.1](https://github.com/getmilpa/agent/compare/v0.26.0...v0.26.1) (2026-08-24)
+
+
+### Bug Fixes
+
+* **projector:** a work cycle is any turn, not only an assistant one — real agent runs record user turn, then work, then response ([#51](https://github.com/getmilpa/agent/issues/51)) ([ffffe85](https://github.com/getmilpa/agent/commit/ffffe85c5c4b4de19e04c0697c384d5d92a6d1dc))
+
 ## [0.26.0](https://github.com/getmilpa/agent/compare/v0.25.0...v0.26.0) (2026-08-24)
 
 
