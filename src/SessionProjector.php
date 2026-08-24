@@ -224,31 +224,15 @@ final readonly class SessionProjector
                     'detailWhy' => \is_string($p['reason']['message'] ?? null) ? $p['reason']['message'] : null,
                 ],
             ],
-            // ── THE EXECUTED OPERATION IS ITSELF A BOARD CARD (greenhouse evidence/0227, 0284) ──────
+            // ── THE EXECUTED OPERATION IS NOT A PER-EVENT CARD (greenhouse evidence/0284 → 0285) ────
             //
-            // The board's cards used to be born ONLY from `TodoChanged` — the agent had to CALL `todo`
-            // to move a card. That made the board observe operator discipline, not work: a view that
-            // needs the work to announce itself is not observing the work. And it taxed the model —
-            // «do the work AND keep my representation of the work» — the very tax Milpa keeps removing.
-            //
-            // So the governed operation the agent ALREADY runs projects a card, derived only from facts
-            // the stream already holds: the operation name it ran, and the seq that identifies this
-            // execution. It is done because it executed. `TodoChanged` keeps its explicit card — it
-            // lost the monopoly, not the capability. This surface still «projects once, each surface
-            // filters»: the board reads `card`, the live transcript reads the `activity` above.
-            SessionEvent::OperationExecuted => [
-                ...$base,
-                'kind' => 'card',
-                'card' => [
-                    'id' => 'op:' . $event->seq,
-                    'text' => \is_string($p['operation'] ?? null) ? $p['operation'] : '',
-                    'to' => 'done',
-                    'from' => null,
-                    'version' => 1,
-                    'origin' => 'operation',
-                    'inheritedFrom' => null,
-                ],
-            ],
+            // evidence/0284 first made this a per-event card, one per operation. evidence/0285 measured
+            // that the wrong granularity: a real workday had 18 tool calls but 2 governed operations,
+            // and one turn's eight tool calls were one unit of work. The board's unit is the assistant
+            // TURN, folded by {@see boardCards()} from the whole stream — so a single operation is no
+            // longer a card on its own. Here it stays audit material, read from the stream where an
+            // audit looks; the board's fold reads it too, as one fact of a turn.
+            SessionEvent::OperationExecuted,
             // ── LA ENTRADA NO SE PROYECTA AQUI, Y ES UNA DECISION ───────────────────────────
             //
             // Esta es la vista del HUMANO en vivo: lo que esta pasando y lo que espera respuesta. La

@@ -32,6 +32,21 @@ final class SessionStoreTest extends TestCase
     }
 
     /** Lo mínimo: se abre, se le habla, y al volver a cargarla está todo. */
+    public function testStreamReturnsTheRawEventsInOrder(): void
+    {
+        // greenhouse evidence/0286: the board's per-turn fold needs the untranslated events, not the
+        // reduced Session. stream() hands them over, in order, so a projector can fold its own way.
+        $almacen = $this->store();
+        $almacen->start('s1', 'x');
+        $almacen->recordTurn('s1', 'assistant', 'voy');
+        $almacen->recordToolCall('s1', 'plugins_list', [], 'ok');
+
+        $tipos = array_map(static fn ($e): string => $e->type, $almacen->stream('s1'));
+
+        self::assertSame(['session.started', 'session.turn', 'session.tool_called'], $tipos);
+        self::assertSame([], $almacen->stream('nunca-existio'), 'an unknown session is an empty stream');
+    }
+
     public function testASessionSurvivesBeingReloaded(): void
     {
         $almacen = $this->store();
