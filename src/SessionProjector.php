@@ -262,6 +262,12 @@ final readonly class SessionProjector
             SessionEvent::TrialRunRecorded,
             SessionEvent::TrialPromoted,
             SessionEvent::TrialDiscarded,
+            // A paused/resumed sequence (H-PERSIST-1, greenhouse decisions/0076) is not painted by
+            // THIS projector either — same decision as QuestionAsked's sibling facts above: this is
+            // the live human transcript, and a sequence's own surface reads its cursor from the
+            // stream directly, not from a per-event translation nobody asked this one to produce.
+            SessionEvent::SequencePaused,
+            SessionEvent::SequenceResumed,
             SessionEvent::ModelCalled,
             SessionEvent::Started,
             SessionEvent::Compacted,

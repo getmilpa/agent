@@ -292,5 +292,29 @@ enum SessionEvent: string
     /** A trial workspace was discarded: its writes died with it, as the contract said they would. */
     case TrialDiscarded = 'session.trial_discarded';
 
+    /**
+     * A GovernedSequence stopped mid-run, waiting for consent — and the session is now paused on
+     * it, exactly as it pauses on an unanswered {@see self::QuestionAsked} (H-PERSIST-1, greenhouse
+     * decisions/0076).
+     *
+     * ── THE FACT AUTHENTICATES THE CURSOR, NOT THE EFFECTS ──────────────────────────────────────
+     *
+     * What travels is the MINIMAL declaration a runner needs to rebuild where the sequence
+     * stopped — its declared steps and `nextIndex` — never a mutable `done`. The effects already
+     * produced have their own fact ({@see self::OperationExecuted}); doubling them here would be a
+     * second, driftable truth about the same thing. Appended AFTER the prefix ran and BEFORE the
+     * process leaves, so a process that dies here leaves a session paused on a fact, not a session
+     * that silently vanished.
+     */
+    case SequencePaused = 'session.sequence_paused';
+
+    /**
+     * The paused sequence's consent arrived and the session can continue.
+     *
+     * It does not re-run or re-authenticate what already happened — it only clears the pause, the
+     * same way {@see self::QuestionAnswered} clears a pending question rather than re-deciding it.
+     */
+    case SequenceResumed = 'session.sequence_resumed';
+
     case Ended = 'session.ended';
 }

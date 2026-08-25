@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Milpa\Agent\Tests;
 
 use Milpa\Agent\AutonomyMode;
+use Milpa\Agent\PausedSequence;
 use Milpa\Agent\PendingQuestion;
 use Milpa\Agent\Principal;
 use Milpa\Agent\SessionStore;
@@ -172,6 +173,49 @@ final class SessionStoreTest extends TestCase
         self::assertTrue($sigue->isRunnable());
         self::assertNull($sigue->question);
         self::assertSame('sqlite', $sigue->turns[0]['content'], 'la respuesta es contexto, no metadato');
+    }
+
+    /**
+     * A paused GovernedSequence is a first-class session fact (H-PERSIST-1, greenhouse
+     * decisions/0076): a process can die between steps and the pause still survives, mirroring
+     * how {@see PendingQuestion} pauses a session for a human answer.
+     */
+    public function testPausingASequenceStopsTheSessionAndResumingClearsIt(): void
+    {
+        $almacen = $this->store();
+        $almacen->start('s1', 'x');
+        $pausada = new PausedSequence(
+            'seq-1',
+            'deadbeef',
+            [
+                ['operation' => 'a', 'arguments' => []],
+                ['operation' => 'b', 'arguments' => ['x' => 1]],
+            ],
+            1,
+        );
+        $almacen->recordSequencePaused('s1', $pausada);
+
+        $enPausa = $almacen->load('s1');
+        self::assertNotNull($enPausa);
+        self::assertFalse($enPausa->isRunnable(), 'con una secuencia pausada no se sigue');
+        self::assertNotNull($enPausa->pausedSequence);
+        self::assertSame('seq-1', $enPausa->pausedSequence->sequenceId);
+        self::assertSame('deadbeef', $enPausa->pausedSequence->digest);
+        self::assertSame(1, $enPausa->pausedSequence->nextIndex);
+        self::assertSame(
+            [
+                ['operation' => 'a', 'arguments' => []],
+                ['operation' => 'b', 'arguments' => ['x' => 1]],
+            ],
+            $enPausa->pausedSequence->steps,
+        );
+
+        $almacen->recordSequenceResumed('s1', 'seq-1');
+
+        $sigue = $almacen->load('s1');
+        self::assertNotNull($sigue);
+        self::assertTrue($sigue->isRunnable());
+        self::assertNull($sigue->pausedSequence);
     }
 
     /** Los permisos son por operación y por sesión, y revocar no borra que se otorgó (P16.5). */

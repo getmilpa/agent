@@ -66,6 +66,7 @@ final readonly class SessionReducer
         $resumen = null;
         $compactadoHasta = 0;
         $pregunta = null;
+        $secuenciaPausada = null;
         /** @var list<array{question: string, answer: string}> $decisiones */
         $decisiones = [];
         $terminada = null;
@@ -299,6 +300,12 @@ final readonly class SessionReducer
                 // disposable workspace, its promotion, its discard — all are evidence for the human
                 // who audits, read from the stream; none changes what the session IS.
                 SessionEvent::TrialRunRecorded, SessionEvent::TrialPromoted, SessionEvent::TrialDiscarded => null,
+                // A PAUSED SEQUENCE STOPS THE SESSION exactly like an open PendingQuestion does
+                // (H-PERSIST-1, greenhouse decisions/0076): the fact IS the cursor, held here until
+                // its matching resume clears it — never re-derived from OperationExecuted, which
+                // stays the record of what already happened.
+                SessionEvent::SequencePaused => $secuenciaPausada = PausedSequence::fromArray($p),
+                SessionEvent::SequenceResumed => $secuenciaPausada = null,
                 SessionEvent::Ended => $terminada = \is_string($p['because'] ?? null) ? $p['because'] : 'sin motivo',
             };
         }
@@ -322,6 +329,7 @@ final readonly class SessionReducer
             summary: $resumen,
             compactedThrough: $compactadoHasta,
             question: $pregunta,
+            pausedSequence: $secuenciaPausada,
             decisions: $decisiones,
             endedBecause: $terminada,
             ownershipAssertion: $ownership,
