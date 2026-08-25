@@ -552,6 +552,32 @@ final readonly class SessionStore
     }
 
     /**
+     * Records that a GovernedSequence stopped mid-run, waiting for consent — the session is now
+     * paused on it, mirroring {@see ask()} exactly (H-PERSIST-1, greenhouse decisions/0076).
+     *
+     * The append is part of the fail-closed frontier: it runs AFTER the sequence's prefix executed
+     * and BEFORE the caller's process leaves, so a process that dies right here leaves a session
+     * paused on a fact — never an in-memory cursor nobody wrote down.
+     */
+    public function recordSequencePaused(string $id, PausedSequence $paused): void
+    {
+        $this->append($id, SessionEvent::SequencePaused, $paused->toArray());
+    }
+
+    /**
+     * Records that a paused sequence's consent arrived and the session can continue, mirroring
+     * {@see answer()}.
+     *
+     * It does not re-run or re-verify anything: it only clears the pause this store's own
+     * {@see recordSequencePaused()} set, the same way answering a question clears it without
+     * re-deciding it.
+     */
+    public function recordSequenceResumed(string $id, string $sequenceId): void
+    {
+        $this->append($id, SessionEvent::SequenceResumed, ['sequenceId' => $sequenceId]);
+    }
+
+    /**
      * Appends a SIGNED claim of ownership over this session (greenhouse decisions/0056).
      *
      * What is appended is the ASSERTION — payload, signature, fingerprint, uid — and never a trust

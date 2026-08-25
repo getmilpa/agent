@@ -83,6 +83,15 @@ final readonly class Session
         public ?string $summary = null,
         public int $compactedThrough = 0,
         public ?PendingQuestion $question = null,
+        /**
+         * A GovernedSequence stopped mid-run, waiting for consent — or `null` when none is paused.
+         *
+         * While this is set the session is not runnable ({@see isRunnable()}), the same way an
+         * open {@see PendingQuestion} stops it: a process can die here and a later one still finds
+         * the cursor, because the pause is a fact of the stream and not a variable that lived only
+         * in the dead process's memory (H-PERSIST-1, greenhouse decisions/0076).
+         */
+        public ?PausedSequence $pausedSequence = null,
         // Lo más caro de perder al compactar: son las decisiones que NO eran del agente. Si se
         // borraran, volvería a preguntarlas o —peor— volvería a suponerlas.
         public array $decisions = [],
@@ -123,10 +132,10 @@ final readonly class Session
     ) {
     }
 
-    /** Si la sesión sigue viva: ni terminada ni esperando una respuesta humana. */
+    /** Si la sesión sigue viva: ni terminada, ni esperando una respuesta humana, ni una secuencia pausada. */
     public function isRunnable(): bool
     {
-        return $this->endedBecause === null && $this->question === null;
+        return $this->endedBecause === null && $this->question === null && $this->pausedSequence === null;
     }
 
     /**
