@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.27.0](https://github.com/getmilpa/agent/compare/v0.26.1...v0.27.0) (2026-08-25)
+
+
+### Features
+
+* a paused governed sequence is a first-class session fact ([#53](https://github.com/getmilpa/agent/issues/53)) ([66fa84c](https://github.com/getmilpa/agent/commit/66fa84c2ea3bf8d4d9c2677bb379a912a8bf9427))
+
 ## [0.26.1](https://github.com/getmilpa/agent/compare/v0.26.0...v0.26.1) (2026-08-24)
 
 
