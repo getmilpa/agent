@@ -61,6 +61,27 @@ enum SessionEvent: string
     case ModelCalled = 'session.model_called';
 
     /**
+     * The model answered, and the answer reported what the call COST: prompt, completion, and total
+     * tokens, plus a cache figure when the provider named one.
+     *
+     * ── THE OTHER HALF OF {@see self::ModelCalled} ──────────────────────────────────────────────
+     *
+     * `ModelCalled` records what travelled TO the model — read from the request body, before any
+     * reply exists. This records what came BACK, read from the decoded response, and it exists only
+     * on success. They are two facts about one call and they are kept as two events on purpose: the
+     * request is written even when the call then fails, so folding the cost into it would force a
+     * placeholder for every failure and make «no reply yet» indistinguishable from «cost nothing».
+     *
+     * DERIVED FROM THE RESPONSE THE PROVIDER SPOKE, never from an estimate. A view that cannot tell
+     * whether a number was counted or guessed has to guess, and a token bar that guesses is a
+     * fabricated number wearing a real one's clothes. When the provider is silent this event is
+     * simply absent — silence is «not said», not a counted zero.
+     *
+     * NOT A TURN, for the same reason `ModelCalled` is not: observing a channel may not change it.
+     */
+    case ModelReturned = 'session.model_returned';
+
+    /**
      * A message between two sessions of the same tree — parent to child, or child to parent.
      *
      * ── WHY AN EVENT AND NOT A VARIABLE ─────────────────────────────────────────────────────────

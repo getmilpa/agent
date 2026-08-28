@@ -290,7 +290,10 @@ final readonly class SessionReducer
                 // entonces, no con qué sigue ahora.
                 SessionEvent::SystemSet,
                 SessionEvent::OperationExecuted,
-                SessionEvent::EndedWithOpenWork, SessionEvent::TodosTransferred, SessionEvent::ModelCalled => null,
+                SessionEvent::EndedWithOpenWork, SessionEvent::TodosTransferred, SessionEvent::ModelCalled,
+                // The cost of a call does not change the fold — it is a fact for replay and for
+                // return-aware observers, read straight from the stream, never re-derived here.
+                SessionEvent::ModelReturned => null,
                 // A COMPOSITION DOES NOT CHANGE THE FOLD, and it is a decision the exhaustive match
                 // forces (greenhouse decisions/0059). What a session needs to CONTINUE — its goal,
                 // plan, pending work — does not move because a rehearsal descended a ceiling. The
