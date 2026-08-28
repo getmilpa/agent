@@ -278,6 +278,22 @@ final readonly class SessionStore
     }
 
     /**
+     * Appends what a model call COST, once its response was decoded — the half {@see recordModelCall}
+     * cannot supply because it fires before any reply exists (greenhouse H-USAGE-1).
+     *
+     * `$return` is the shape {@see \Milpa\AiGateway\ReturnObserver::observeReturn()} hands over:
+     * `model` and a `usage` already normalized across providers to `prompt_tokens`,
+     * `completion_tokens`, `total_tokens`, and `cached_tokens` when one was declared. It is appended
+     * as given — the store records what the gateway measured and adds no arithmetic of its own.
+     *
+     * @param array<string, mixed> $return
+     */
+    public function recordModelReturn(string $id, array $return): void
+    {
+        $this->append($id, SessionEvent::ModelReturned, $return);
+    }
+
+    /**
      * La referencia del `system` que esta sesión ya declaró, o `null` si todavía no declara ninguno.
      *
      * Se pregunta al stream DE ESTA SESIÓN y a ningún otro. Compartir la respuesta entre sesiones
