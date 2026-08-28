@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.28.0](https://github.com/getmilpa/agent/compare/v0.27.0...v0.28.0) (2026-08-28)
+
+
+### Features
+
+* record what a model call cost as its own session.model_returned event ([#55](https://github.com/getmilpa/agent/issues/55)) ([08d66d6](https://github.com/getmilpa/agent/commit/08d66d6441789d7b50907f2a6e0a5a1a67dda06d))
+
 ## [0.27.0](https://github.com/getmilpa/agent/compare/v0.26.1...v0.27.0) (2026-08-25)
 
 
