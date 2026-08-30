@@ -36,15 +36,17 @@ final readonly class SessionPolicy
     /**
      * Qué hacer con esta llamada, dada la sesión en la que ocurre.
      *
-     * @param bool $mutating          si la operación cambia algo. Lo declara ella misma; leer es
-     *                                gratis porque un agente que no puede leer no puede decidir nada
-     * @param bool $requiresSignature si la operación exige consentimiento firmado para ESTA llamada
+     * @param bool $mutating             si la operación cambia algo. Lo declara ella misma; leer es
+     *                                   gratis porque un agente que no puede leer no puede decidir nada
+     * @param bool $requiresConfirmation si la operación exige que un humano la autorice UNA VEZ POR
+     *                                   SESIÓN, en cualquier modo (una decisión de producto que su techo
+     *                                   honesto no dispara por sí solo — p. ej. `agent_spawn`)
      */
     public function decide(
         Session $session,
         string $operation,
         bool $mutating,
-        bool $requiresSignature,
+        bool $requiresConfirmation,
         ?AutonomyMode $ceiling = null,
         // EL PERFIL COMPUESTO DE ESTA LLAMADA, para juzgarla contra el SOBRE de un grant apretado
         // (greenhouse decisions/0067). Opcional porque un sí pelón (sobre null) admite sin mirarlo;
@@ -73,10 +75,22 @@ final readonly class SessionPolicy
             ));
         }
 
-        // PRIMERO la firma. Ningún permiso de sesión y ningún modo la desbloquean — ver el docblock:
-        // moverla más abajo la volvería pre-aprobable, que es exactamente lo que no puede ser.
-        if ($requiresSignature) {
-            return PolicyDecision::RequireSignature;
+        // PRIMERO la confirmación DECLARADA, antes de que el modo pueda eximirla: una operación que
+        // pide autorizarse «una vez por sesión» (p. ej. delegar con `agent_spawn`) la pide en CUALQUIER
+        // modo, no solo en `ask`. Va aquí arriba justo por eso — el modo no la salta.
+        //
+        // Es una CONFIRMACIÓN de sesión (`AskPermission`), no una firma criptográfica (greenhouse
+        // decisions/0177, elección B de Rod): un «sí» la otorga para el resto de la sesión y la llamada
+        // EJECUTA — el patrón que `perm:` ya sostiene. Antes esto devolvía `RequireSignature`, pero para
+        // una herramienta interna de sesión la firma es insatisfacible (no hay comando que firmar) y sin
+        // principal verificado no atribuye a nadie; la confirmación graba QUIÉN contestó y basta para una
+        // delegación que corre como el MISMO principal (WriteAsUser, no escala). La firma criptográfica
+        // sigue siendo el dominio de las ops firmables por CLI (`capabilities:enable`, `identity:*`).
+        // Respeta el «sí» ya dado: si la sesión YA otorgó esta operación, no re-pregunta (igual que la
+        // ruta de mutación honra un grant previo). Sin esta condición la confirmación se re-pediría en
+        // cada llamada y el agente loopearía — el mismo bug que la firma tenía, movido de lugar.
+        if ($requiresConfirmation && !$session->allows($operation, $composed)) {
+            return PolicyDecision::AskPermission;
         }
 
         // Reading is not asked about — HERE. But a read can still cross the perimeter: a query
