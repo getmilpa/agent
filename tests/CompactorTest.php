@@ -205,4 +205,32 @@ final class CompactorTest extends TestCase
             (new FactualSummarizer())->summarize($sesion, \PHP_INT_MAX),
         );
     }
+    /**
+     * Window-aware: pocos turnos pero GRANDES revientan la ventana antes de `maxTurns`. El disparo por
+     * presupuesto de tokens compacta ANTES de que el proveedor rechace el request — la muerte «exceeds
+     * context size» que el conteo de turnos deja pasar (greenhouse evidence/0436).
+     */
+    public function testCompactsOnTokenBudgetEvenBelowMaxTurns(): void
+    {
+        $almacen = new SessionStore(new InMemoryEventStore());
+        $almacen->start('s1', 'construir la app de tareas');
+        $grande = str_repeat('x', 5000);   // ~1250 tokens por turno
+        for ($i = 1; $i <= 8; ++$i) {
+            $almacen->recordTurn('s1', $i % 2 === 0 ? 'assistant' : 'user', $grande);
+        }
+        $sesion = $almacen->load('s1') ?? self::fail('sin sesion');
+
+        // 8 turnos < maxTurns=40 → el conteo NO dispara; pero ~10k tokens > maxTokens=4000 → SÍ dispara.
+        self::assertFalse((new Compactor(maxTurns: 40, keepRecent: 12))->shouldCompact($sesion), 'por turnos no toca');
+
+        $ventana = new Compactor(maxTurns: 40, keepRecent: 12, maxTokens: 4000);
+        self::assertTrue($ventana->shouldCompact($sesion), 'por ventana SI toca');
+
+        $resumen = $ventana->compactIfNeeded($almacen, $sesion);
+        self::assertNotNull($resumen);
+        $despues = $almacen->load('s1') ?? self::fail('sin sesion');
+        self::assertCount(8, $despues->turns, 'el stream conserva los 8 integros');
+        self::assertGreaterThan(0, $despues->compactedThrough, 'compacto hasta un corte');
+    }
 }
+
