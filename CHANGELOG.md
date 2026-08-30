@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.29.1](https://github.com/getmilpa/agent/compare/v0.29.0...v0.29.1) (2026-08-30)
+
+
+### Bug Fixes
+
+* window-aware compaction (compact by token budget, not only turns) ([#60](https://github.com/getmilpa/agent/issues/60)) ([bf017b5](https://github.com/getmilpa/agent/commit/bf017b5fe4a7df4b8218da77eeeee3745a0a7180))
+
 ## [0.29.0](https://github.com/getmilpa/agent/compare/v0.28.0...v0.29.0) (2026-08-30)
 
 
