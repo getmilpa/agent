@@ -233,4 +233,3 @@ final class CompactorTest extends TestCase
         self::assertGreaterThan(0, $despues->compactedThrough, 'compacto hasta un corte');
     }
 }
-
