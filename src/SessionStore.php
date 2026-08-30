@@ -294,6 +294,20 @@ final readonly class SessionStore
     }
 
     /**
+     * Appends what a model call REASONED, once its response was decoded — the deliberation neither
+     * {@see recordModelCall} (the input) nor {@see recordModelReturn} (the cost) carries.
+     *
+     * `$reasoning` is the provider's `reasoning_content` for the call, verbatim, as the gateway's
+     * {@see \Milpa\AiGateway\ReasoningObserver::observeReasoning()} hands it over. It is appended as
+     * given — the store records what the model spoke and adds nothing. Fires only when the provider
+     * actually reasoned: a silent model records no event here, never an empty one.
+     */
+    public function recordModelReasoning(string $id, string $reasoning): void
+    {
+        $this->append($id, SessionEvent::ModelReasoned, ['reasoning' => $reasoning]);
+    }
+
+    /**
      * La referencia del `system` que esta sesión ya declaró, o `null` si todavía no declara ninguno.
      *
      * Se pregunta al stream DE ESTA SESIÓN y a ningún otro. Compartir la respuesta entre sesiones

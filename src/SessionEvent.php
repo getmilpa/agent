@@ -82,6 +82,24 @@ enum SessionEvent: string
     case ModelReturned = 'session.model_returned';
 
     /**
+     * The model REASONED — the private deliberation a reasoning provider exposes as `reasoning_content`,
+     * distinct from the reply it precedes.
+     *
+     * ── A THIRD FACT, NEITHER INPUT NOR OUTPUT ──────────────────────────────────────────────────
+     *
+     * {@see self::ModelCalled} records what travelled TO the model; {@see self::ModelReturned} records
+     * what the call COST. This records what the model THOUGHT on its way to the answer — read from the
+     * decoded response's `reasoning_content`, and kept as its own event for the same reason the other
+     * two are split: one event, one fact. It exists only when the provider actually spoke reasoning; a
+     * model that reasons silently produces no event, never an empty one — silence is «not said».
+     *
+     * NOT A TURN, for the same reason its siblings are not: observing a channel may not change it. The
+     * live transcript does not paint it; a developer surface reads it from the stream and may stream it
+     * as it lands, then fold it away once the turn resolves.
+     */
+    case ModelReasoned = 'session.model_reasoned';
+
+    /**
      * A message between two sessions of the same tree — parent to child, or child to parent.
      *
      * ── WHY AN EVENT AND NOT A VARIABLE ─────────────────────────────────────────────────────────
