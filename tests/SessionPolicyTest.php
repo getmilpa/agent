@@ -43,7 +43,7 @@ final class SessionPolicyTest extends TestCase
         foreach ([AutonomyMode::Ask, AutonomyMode::Acknowledge, AutonomyMode::Auto] as $modo) {
             self::assertSame(
                 PolicyDecision::Allow,
-                $politica->decide($this->sesion($modo), 'plugins_list', mutating: false, requiresSignature: false),
+                $politica->decide($this->sesion($modo), 'plugins_list', mutating: false, requiresConfirmation: false),
                 "en modo {$modo->value} leer tendría que pasar",
             );
         }
@@ -56,7 +56,7 @@ final class SessionPolicyTest extends TestCase
             $this->sesion(AutonomyMode::Ask),
             'make',
             mutating: true,
-            requiresSignature: false,
+            requiresConfirmation: false,
         );
 
         self::assertSame(PolicyDecision::AskPermission, $decision);
@@ -69,7 +69,7 @@ final class SessionPolicyTest extends TestCase
             $this->sesion(AutonomyMode::Ask, 'make'),
             'make',
             mutating: true,
-            requiresSignature: false,
+            requiresConfirmation: false,
         );
 
         self::assertSame(PolicyDecision::Allow, $decision);
@@ -82,7 +82,7 @@ final class SessionPolicyTest extends TestCase
             $this->sesion(AutonomyMode::Ask, 'make'),
             'plugins_disable',
             mutating: true,
-            requiresSignature: false,
+            requiresConfirmation: false,
         );
 
         self::assertSame(PolicyDecision::AskPermission, $decision);
@@ -96,7 +96,7 @@ final class SessionPolicyTest extends TestCase
         foreach ([AutonomyMode::Acknowledge, AutonomyMode::Auto] as $modo) {
             self::assertSame(
                 PolicyDecision::Allow,
-                $politica->decide($this->sesion($modo), 'make', mutating: true, requiresSignature: false),
+                $politica->decide($this->sesion($modo), 'make', mutating: true, requiresConfirmation: false),
                 "en modo {$modo->value} una mutación no debería detenerse",
             );
         }
@@ -110,21 +110,35 @@ final class SessionPolicyTest extends TestCase
      * perdido la única compuerta que nombra la llamada concreta en vez de la categoría. Esta prueba
      * es lo que hace que reordenar esas líneas deje de ser un cambio inocente.
      */
-    public function testNoModeAndNoGrantCanPreApproveASignature(): void
+    public function testADeclaredConfirmationAsksInEveryModeUntilItIsGranted(): void
     {
+        // Una confirmación DECLARADA (p. ej. delegar) se pide en CUALQUIER modo — el modo no la salta —
+        // hasta que un «sí» la otorga para la sesión (greenhouse decisions/0177, elección B). Antes esto
+        // devolvía RequireSignature; ahora es una confirmación de sesión que un «sí» sí pre-aprueba.
         $politica = new SessionPolicy();
 
         foreach ([AutonomyMode::Ask, AutonomyMode::Acknowledge, AutonomyMode::Auto] as $modo) {
             self::assertSame(
-                PolicyDecision::RequireSignature,
+                PolicyDecision::AskPermission,
                 $politica->decide(
-                    // Con el permiso YA otorgado, que es el caso que más fácil se cuela.
+                    $this->sesion($modo),   // sin otorgar: pregunta en todos los modos
+                    'plugins_remove',
+                    mutating: true,
+                    requiresConfirmation: true,
+                ),
+                "en modo {$modo->value} una confirmación declarada se pide (el modo no la exime)",
+            );
+
+            self::assertSame(
+                PolicyDecision::Allow,
+                $politica->decide(
+                    // Con el «sí» YA dado esta sesión, la confirmación queda pre-aprobada — una vez.
                     $this->sesion($modo, 'plugins_remove'),
                     'plugins_remove',
                     mutating: true,
-                    requiresSignature: true,
+                    requiresConfirmation: true,
                 ),
-                "en modo {$modo->value} una firma no puede estar pre-aprobada",
+                "en modo {$modo->value} un «sí» previo pre-aprueba la confirmación",
             );
         }
     }

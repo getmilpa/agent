@@ -44,7 +44,7 @@ final class AutonomyCeilingTest extends TestCase
             $this->hija(AutonomyMode::Auto),
             'archivos.escribir',
             mutating: true,
-            requiresSignature: false,
+            requiresConfirmation: false,
             ceiling: AutonomyMode::Ask,
         );
 
@@ -59,7 +59,7 @@ final class AutonomyCeilingTest extends TestCase
             $this->hija(AutonomyMode::Ask),
             'archivos.escribir',
             mutating: true,
-            requiresSignature: false,
+            requiresConfirmation: false,
             ceiling: AutonomyMode::Auto,
         );
 
@@ -74,7 +74,7 @@ final class AutonomyCeilingTest extends TestCase
             $this->hija(AutonomyMode::Auto),
             'archivos.escribir',
             mutating: true,
-            requiresSignature: false,
+            requiresConfirmation: false,
             ceiling: AutonomyMode::Auto,
         );
 
@@ -101,12 +101,13 @@ final class AutonomyCeilingTest extends TestCase
         );
     }
 
-    public function testLaFirmaSigueMandandoSobreCualquierTecho(): void
+    public function testLaConfirmacionDeclaradaSigueMandandoSobreCualquierTecho(): void
     {
-        // Ningún modo y ningún techo desbloquean una firma, y ninguno la IMPONE donde no la había:
-        // el techo acota la autonomía, no reescribe qué exige consentimiento.
+        // Ningún modo y ningún techo saltan una confirmación DECLARADA no otorgada, y ninguno la IMPONE
+        // donde no la había: el techo acota la autonomía, no reescribe qué exige consentimiento
+        // (greenhouse decisions/0177, elección B: confirmación de sesión, no firma).
         self::assertSame(
-            PolicyDecision::RequireSignature,
+            PolicyDecision::AskPermission,
             $this->policy->decide($this->hija(AutonomyMode::Auto), 'liberar', true, true, AutonomyMode::Auto),
         );
     }

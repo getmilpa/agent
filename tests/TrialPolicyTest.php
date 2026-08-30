@@ -103,12 +103,13 @@ final class TrialPolicyTest extends TestCase
     }
 
     /** A signature requirement is never bypassed — it sits above every other decision. */
-    public function testASignatureRequirementIsNeverBypassedByATrial(): void
+    public function testADeclaredConfirmationIsNeverBypassedByATrial(): void
     {
         $p = new SessionPolicy();
         $c = $this->confinada($this->dentroDelTecho());
 
-        self::assertSame(PolicyDecision::RequireSignature, $p->decide($this->sesionEnAsk(), 'probe', true, true, null, $c->effective, $c));
+        // Un ensayo no exime la confirmación declarada: sigue preguntando (greenhouse decisions/0177).
+        self::assertSame(PolicyDecision::AskPermission, $p->decide($this->sesionEnAsk(), 'probe', true, true, null, $c->effective, $c));
     }
 
     /** The trial ceiling is what the acta says — conservative, and nothing a human clicked. */
