@@ -60,7 +60,11 @@ final readonly class Compactor
     ) {
     }
 
-    /** Estimación barata de tokens de una lista de turnos: ~4 chars por token. */
+    /**
+     * Estimación barata de tokens de una lista de turnos: ~4 chars por token.
+     *
+     * @param list<array{role: string, content: string, seq: int}> $turns
+     */
     private function estimateTokens(array $turns): int
     {
         $chars = 0;
