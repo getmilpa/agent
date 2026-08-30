@@ -88,7 +88,10 @@ final readonly class SessionPolicy
         // op with no composed profile reads as None here — nothing declared to leave.
         if (!$mutating) {
             $efectivo = $ceiling === null ? $session->mode : $session->mode->strictest($ceiling);
-            $externality = $composed?->externality ?? \Milpa\Command\Effect\Externality::None;
+            $externality = \Milpa\Command\Effect\Externality::None;
+            if ($composed !== null) {
+                $externality = $composed->externality;
+            }
 
             if (!$efectivo->pausesBeforeEgress($externality)) {
                 return PolicyDecision::Allow;
