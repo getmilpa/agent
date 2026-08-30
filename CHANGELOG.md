@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.30.0](https://github.com/getmilpa/agent/compare/v0.29.1...v0.30.0) (2026-08-30)
+
+
+### Features
+
+* record what a model call reasoned as its own session event ([#62](https://github.com/getmilpa/agent/issues/62)) ([0a4634c](https://github.com/getmilpa/agent/commit/0a4634c2b3c44c25487d12e16bd229a233e8d0f3))
+
 ## [0.29.1](https://github.com/getmilpa/agent/compare/v0.29.0...v0.29.1) (2026-08-30)
 
 
