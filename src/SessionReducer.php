@@ -293,7 +293,10 @@ final readonly class SessionReducer
                 SessionEvent::EndedWithOpenWork, SessionEvent::TodosTransferred, SessionEvent::ModelCalled,
                 // The cost of a call does not change the fold — it is a fact for replay and for
                 // return-aware observers, read straight from the stream, never re-derived here.
-                SessionEvent::ModelReturned => null,
+                SessionEvent::ModelReturned,
+                // Reasoning does not change the fold either — it is deliberation, read from the stream by the
+                // developer surface and by reasoning-aware observers, never re-derived into session state.
+                SessionEvent::ModelReasoned => null,
                 // A COMPOSITION DOES NOT CHANGE THE FOLD, and it is a decision the exhaustive match
                 // forces (greenhouse decisions/0059). What a session needs to CONTINUE — its goal,
                 // plan, pending work — does not move because a rehearsal descended a ceiling. The

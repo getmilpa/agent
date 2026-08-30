@@ -270,6 +270,7 @@ final readonly class SessionProjector
             SessionEvent::SequenceResumed,
             SessionEvent::ModelCalled,
             SessionEvent::ModelReturned,
+            SessionEvent::ModelReasoned,
             SessionEvent::Started,
             SessionEvent::Compacted,
             SessionEvent::AnswerWindowClosed,
