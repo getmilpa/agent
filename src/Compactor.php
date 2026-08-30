@@ -45,17 +45,46 @@ final readonly class Compactor
      *                        fuerza: si fueran iguales, compactar no acortaría nada y la sesión
      *                        quedaría compactándose para siempre sin avanzar
      */
+    /**
+     * @param int $maxTokens presupuesto de tokens de la VENTANA sin resumir antes de compactar. El
+     *                       conteo de turnos no ve el TAMAÑO de un turno, así que veinte turnos con
+     *                       salidas grandes revientan la ventana del proveedor mucho antes de los
+     *                       `maxTurns` — el 400 «exceeds context size» llega DESPUÉS, a media jornada.
+     *                       Con esto la compactación dispara ANTES de enviar. `0` la apaga (solo turnos).
+     */
     public function __construct(
         private int $maxTurns = 40,
         private int $keepRecent = 12,
         private Summarizer $summarizer = new FactualSummarizer(),
+        private int $maxTokens = 0,
     ) {
+    }
+
+    /**
+     * Estimación barata de tokens de una lista de turnos: ~4 chars por token.
+     *
+     * @param list<array{role: string, content: string, seq: int}> $turns
+     */
+    private function estimateTokens(array $turns): int
+    {
+        $chars = 0;
+        foreach ($turns as $t) {
+            $chars += \strlen((string) $t['content']);
+        }
+
+        return intdiv($chars, 4);
     }
 
     /** Si a esta sesión le toca compactar ahora. */
     public function shouldCompact(Session $session): bool
     {
-        return $this->maxTurns > $this->keepRecent && \count($this->pendientes($session)) > $this->maxTurns;
+        $pend = $this->pendientes($session);
+        if ($this->maxTurns > $this->keepRecent && \count($pend) > $this->maxTurns) {
+            return true;
+        }
+
+        // Window-aware: compacta ANTES de que la ventana crezca hasta que el proveedor la rechace.
+        return $this->maxTokens > 0 && $this->estimateTokens($pend) > $this->maxTokens;
     }
 
     /**
@@ -72,12 +101,42 @@ final readonly class Compactor
         }
 
         $pendientes = $this->pendientes($session);
-        $corte = $pendientes[\count($pendientes) - $this->keepRecent - 1]['seq'];
+        $corte = $this->cutPoint($pendientes);
 
         $resumen = $this->summarizer->summarize($session, $corte);
         $store->compact($session->id, $resumen, $corte);
 
         return $resumen;
+    }
+
+    /**
+     * El `seq` hasta donde se resume: se conservan los turnos MÁS RECIENTES que caben, acotados por el
+     * turno (`keepRecent`) Y por el presupuesto de tokens de la cola (60% de `maxTokens`, lo que sea
+     * MENOS turnos). El presupuesto gana para que la ventana quepa aunque un turno reciente sea enorme;
+     * siempre se conserva al menos uno («qué estábamos haciendo») y se resume al menos uno (progreso).
+     *
+     * @param list<array{role: string, content: string, seq: int}> $pend
+     */
+    private function cutPoint(array $pend): int
+    {
+        $n = \count($pend);
+        $keepBudget = $this->maxTokens > 0 ? intdiv($this->maxTokens * 3, 5) : \PHP_INT_MAX;
+        $tokens = 0;
+        $keep = 0;
+        for ($i = $n - 1; $i >= 0 && $keep < $this->keepRecent; $i--) {
+            $t = $this->estimateTokens([$pend[$i]]);
+            if ($keep > 0 && ($tokens + $t) > $keepBudget) {
+                break;
+            }
+            $tokens += $t;
+            $keep++;
+        }
+        if ($keep >= $n) {
+            $keep = \max(1, $n - 1);
+        }
+        $cutIdx = $n - $keep - 1;
+
+        return $cutIdx >= 0 ? $pend[$cutIdx]['seq'] : 0;
     }
 
     /**
