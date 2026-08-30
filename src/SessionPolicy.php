@@ -90,9 +90,19 @@ final readonly class SessionPolicy
             $efectivo = $ceiling === null ? $session->mode : $session->mode->strictest($ceiling);
             $externality = $composed?->externality ?? \Milpa\Command\Effect\Externality::None;
 
-            return $efectivo->pausesBeforeEgress($externality)
-                ? PolicyDecision::AskPermission
-                : PolicyDecision::Allow;
+            if (!$efectivo->pausesBeforeEgress($externality)) {
+                return PolicyDecision::Allow;
+            }
+
+            // A grant already given THIS session admits the crossing — do not re-ask, exactly as the
+            // mutation path honours a prior grant below. Without this line an authorised egress
+            // re-pauses on every call and the agent loops, never executing (found by Rod: web:search
+            // asked, granted, and asked again — four identical decisions, zero results).
+            if ($session->allows($operation, $composed)) {
+                return PolicyDecision::Allow;
+            }
+
+            return PolicyDecision::AskPermission;
         }
 
         // EL ENSAYO NO PIDE PERMISO — cuando sus efectos caben ENTEROS en el techo de ensayo Y están
@@ -167,7 +177,7 @@ final readonly class SessionPolicy
 
         return new PendingQuestion(
             id: 'perm:' . $operation,
-            question: "El agente quiere correr «{$operation}», que cambia algo. ¿Lo autorizas en esta sesión?",
+            question: "El agente quiere correr «{$operation}». ¿Lo autorizas en esta sesión?",
             options: ['sí', 'no'],
             why: $detalle,
             // Sin plazo si nadie lo pone, y eso NO es un descuido: cuánto tiempo tiene un humano para
