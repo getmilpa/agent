@@ -88,4 +88,46 @@ enum AutonomyMode: string
     {
         return true;
     }
+
+    /**
+     * The highest externality a NON-mutating call may carry and still pass unattended under this
+     * mode; strictly above it, the gate pauses. Declared here, not inferred — the policy compares
+     * against this and does not hardcode a class. Only the strict, human-present mode (Ask) gates
+     * egress, parallel to {@see pausesBeforeMutation()}; the looser modes do not (Acknowledge
+     * notifies-and-continues, Auto runs). Ask stops at SamePrincipal, so a call reaching a third
+     * party or the public pauses while one staying inside the principal's own systems passes.
+     */
+    public function egressThreshold(): ?\Milpa\Command\Effect\Externality
+    {
+        return $this === self::Ask ? \Milpa\Command\Effect\Externality::SamePrincipal : null;
+    }
+
+    /**
+     * Whether a NON-mutating call of externality $externality must pause before it crosses the
+     * perimeter under this mode. Egress is ORTHOGONAL to mutation: a read is read-only here yet may
+     * still leave the perimeter (a query handed to a third party). True only when $externality is
+     * strictly above this mode's {@see egressThreshold()} on the perimeter order
+     * None < SamePrincipal < ThirdParty < Public. Unknown is off that axis — an unclassified read is
+     * not egress-gated here (fail-closed on the unclassified is a separate decision); the mutation
+     * and signature gates still cover it.
+     */
+    public function pausesBeforeEgress(\Milpa\Command\Effect\Externality $externality): bool
+    {
+        $threshold = $this->egressThreshold();
+        if ($threshold === null) {
+            return false;
+        }
+
+        $rank = static fn (\Milpa\Command\Effect\Externality $e): ?int => match ($e) {
+            \Milpa\Command\Effect\Externality::None => 0,
+            \Milpa\Command\Effect\Externality::SamePrincipal => 1,
+            \Milpa\Command\Effect\Externality::ThirdParty => 2,
+            \Milpa\Command\Effect\Externality::Public => 3,
+            \Milpa\Command\Effect\Externality::Unknown => null,
+        };
+        $mine = $rank($externality);
+        $bar = $rank($threshold);
+
+        return $mine !== null && $bar !== null && $mine > $bar;
+    }
 }

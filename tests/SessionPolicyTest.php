@@ -5,6 +5,11 @@ declare(strict_types=1);
 namespace Milpa\Agent\Tests;
 
 use Milpa\Agent\AutonomyMode;
+use Milpa\Command\Effect\Authority;
+use Milpa\Command\Effect\EffectProfile;
+use Milpa\Command\Effect\Externality;
+use Milpa\Command\Effect\Mutation;
+use Milpa\Command\Effect\Reversibility;
 use Milpa\Agent\PolicyDecision;
 use Milpa\Agent\Session;
 use Milpa\Agent\SessionPolicy;
@@ -161,5 +166,54 @@ final class SessionPolicyTest extends TestCase
         $pregunta = (new SessionPolicy())->permissionQuestion('plugins_lock', []);
 
         self::assertSame('sin argumentos', $pregunta->why);
+    }
+
+    private function outboundRead(): EffectProfile
+    {
+        return new EffectProfile(Mutation::None, Externality::ThirdParty, Reversibility::Guaranteed, Authority::Read, rollbackContract: 'nothing to roll back');
+    }
+
+    private function localRead(): EffectProfile
+    {
+        return new EffectProfile(Mutation::None, Externality::None, Reversibility::Guaranteed, Authority::Read, rollbackContract: 'nothing to roll back');
+    }
+
+    /** A read that leaves the perimeter (ThirdParty) pauses in ask mode, even though it mutates nothing here. */
+    public function testAnOutboundReadPausesInAskMode(): void
+    {
+        self::assertSame(
+            PolicyDecision::AskPermission,
+            (new SessionPolicy())->decide($this->sesion(AutonomyMode::Ask), 'web:search', false, false, null, $this->outboundRead()),
+        );
+    }
+
+    /** A read that stays inside the perimeter still passes free — reading is not asked about. */
+    public function testALocalReadStillPassesFree(): void
+    {
+        self::assertSame(
+            PolicyDecision::Allow,
+            (new SessionPolicy())->decide($this->sesion(AutonomyMode::Ask), 'read:file', false, false, null, $this->localRead()),
+        );
+    }
+
+    /** An egress already granted this session is admitted without re-asking — no loop. */
+    public function testAnAuthorisedOutboundReadDoesNotReAsk(): void
+    {
+        self::assertSame(
+            PolicyDecision::Allow,
+            (new SessionPolicy())->decide($this->sesion(AutonomyMode::Ask, 'web:search'), 'web:search', false, false, null, $this->outboundRead()),
+        );
+    }
+
+    /** The looser modes do not gate egress — only the strict, human-present mode does. */
+    public function testLooserModesDoNotGateEgress(): void
+    {
+        foreach ([AutonomyMode::Acknowledge, AutonomyMode::Auto] as $modo) {
+            self::assertSame(
+                PolicyDecision::Allow,
+                (new SessionPolicy())->decide($this->sesion($modo), 'web:search', false, false, null, $this->outboundRead()),
+                "mode {$modo->value} should not pause on egress",
+            );
+        }
     }
 }

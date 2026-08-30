@@ -79,10 +79,33 @@ final readonly class SessionPolicy
             return PolicyDecision::RequireSignature;
         }
 
-        // Leer no se pregunta. Un agente al que hay que autorizarle cada consulta no es un agente
-        // supervisado, es uno inservible — y la supervisión se gasta en lo que no importa.
+        // Reading is not asked about — HERE. But a read can still cross the perimeter: a query
+        // handed to a third party is read-only locally and outbound to the world. Mutation and
+        // externality are orthogonal axes ({@see \Milpa\Command\Effect\Externality} — the
+        // dimension `mutating: bool` could never carry), and the gate governs the boundary crossings
+        // relevant to the session mode, not mutation alone. The effective mode declares the egress
+        // threshold it lets pass unattended; the policy compares, it does not hardcode a class. An
+        // op with no composed profile reads as None here — nothing declared to leave.
         if (!$mutating) {
-            return PolicyDecision::Allow;
+            $efectivo = $ceiling === null ? $session->mode : $session->mode->strictest($ceiling);
+            $externality = \Milpa\Command\Effect\Externality::None;
+            if ($composed !== null) {
+                $externality = $composed->externality;
+            }
+
+            if (!$efectivo->pausesBeforeEgress($externality)) {
+                return PolicyDecision::Allow;
+            }
+
+            // A grant already given THIS session admits the crossing — do not re-ask, exactly as the
+            // mutation path honours a prior grant below. Without this line an authorised egress
+            // re-pauses on every call and the agent loops, never executing (found by Rod: web:search
+            // asked, granted, and asked again — four identical decisions, zero results).
+            if ($session->allows($operation, $composed)) {
+                return PolicyDecision::Allow;
+            }
+
+            return PolicyDecision::AskPermission;
         }
 
         // EL ENSAYO NO PIDE PERMISO — cuando sus efectos caben ENTEROS en el techo de ensayo Y están
@@ -157,7 +180,7 @@ final readonly class SessionPolicy
 
         return new PendingQuestion(
             id: 'perm:' . $operation,
-            question: "El agente quiere correr «{$operation}», que cambia algo. ¿Lo autorizas en esta sesión?",
+            question: "El agente quiere correr «{$operation}». ¿Lo autorizas en esta sesión?",
             options: ['sí', 'no'],
             why: $detalle,
             // Sin plazo si nadie lo pone, y eso NO es un descuido: cuánto tiempo tiene un humano para
