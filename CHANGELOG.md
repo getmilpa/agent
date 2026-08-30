@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.29.0](https://github.com/getmilpa/agent/compare/v0.28.0...v0.29.0) (2026-08-30)
+
+
+### Features
+
+* the session gate governs egress, not mutation alone ([0f30861](https://github.com/getmilpa/agent/commit/0f30861293215216c29ebb08d29511378157eb5a))
+* the session gate governs egress, not mutation alone ([2d08288](https://github.com/getmilpa/agent/commit/2d082881057d92ba069ff49ab995e070f733b04c))
+
 ## [0.28.0](https://github.com/getmilpa/agent/compare/v0.27.0...v0.28.0) (2026-08-28)
 
 
