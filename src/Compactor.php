@@ -69,7 +69,7 @@ final readonly class Compactor
     {
         $chars = 0;
         foreach ($turns as $t) {
-            $chars += \strlen((string) ($t['content'] ?? ''));
+            $chars += \strlen((string) $t['content']);
         }
 
         return intdiv($chars, 4);
