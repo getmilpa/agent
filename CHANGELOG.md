@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.32.0](https://github.com/getmilpa/agent/compare/v0.31.0...v0.32.0) (2026-09-01)
+
+
+### Features
+
+* narrow session-fact queries for cheap recovery ([#67](https://github.com/getmilpa/agent/issues/67)) ([d1e4d58](https://github.com/getmilpa/agent/commit/d1e4d580f1f6c49c68adffb604fde5335cce77c8))
+* per-session evidence ledger grounding a todo's done ([#66](https://github.com/getmilpa/agent/issues/66)) ([a548a78](https://github.com/getmilpa/agent/commit/a548a78f539e7be6614836c81c4cf8f5a7261440))
+
 ## [0.31.0](https://github.com/getmilpa/agent/compare/v0.30.0...v0.31.0) (2026-08-30)
 
 
