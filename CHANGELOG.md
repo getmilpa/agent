@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.35.0](https://github.com/getmilpa/agent/compare/v0.34.0...v0.35.0) (2026-09-01)
+
+
+### Features
+
+* whole-window budget for composition and compaction ([#73](https://github.com/getmilpa/agent/issues/73)) ([7f7635b](https://github.com/getmilpa/agent/commit/7f7635be8f6b35573c798a2c9a46cd5a0789cbf1))
+
 ## [0.34.0](https://github.com/getmilpa/agent/compare/v0.33.0...v0.34.0) (2026-09-01)
 
 
