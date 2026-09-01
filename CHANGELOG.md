@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.34.0](https://github.com/getmilpa/agent/compare/v0.33.0...v0.34.0) (2026-09-01)
+
+
+### Features
+
+* evidence-backed work state and truncation honesty in session facts ([#71](https://github.com/getmilpa/agent/issues/71)) ([3cc0991](https://github.com/getmilpa/agent/commit/3cc099118c2b0ca88ae965d78ccc5c5c7125187e))
+
 ## [0.33.0](https://github.com/getmilpa/agent/compare/v0.32.0...v0.33.0) (2026-09-01)
 
 
