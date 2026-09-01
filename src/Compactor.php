@@ -104,6 +104,10 @@ final readonly class Compactor
         $corte = $this->cutPoint($pendientes);
 
         $resumen = $this->summarizer->summarize($session, $corte);
+        $factual = $this->summarizer instanceof FactualSummarizer
+            ? $this->summarizer
+            : new FactualSummarizer();
+        $resumen = $factual->withOperationalFacts($resumen, $store->facts($session->id), $corte);
         $store->compact($session->id, $resumen, $corte);
 
         return $resumen;

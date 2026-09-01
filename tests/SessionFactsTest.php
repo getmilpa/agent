@@ -568,6 +568,58 @@ final class SessionFactsTest extends TestCase
         self::assertFalse($facts->lastVerificationOf('MalformedChecks')['ok']);
     }
 
+    /**
+     * Compaction currentness is scoped to the recorded channel, and a later call on the same artifact
+     * makes an older covered call stale even when the later call remains on the recent side of the cut.
+     */
+    public function testOperationalFactsBoundResultsAndDoNotCallAnOlderArtifactFactCurrent(): void
+    {
+        $events = new InMemoryEventStore();
+        $store = new SessionStore($events);
+        $store->start('s1', 'implement and then edit a greeter');
+        $large = (string) json_encode([
+            'ok' => true,
+            'file' => 'src/Plugins/Demo/Services/GreeterService.php',
+            'class' => 'App\\Plugins\\Demo\\Services\\GreeterService',
+            'verified' => 'syntax and namespace',
+            'output' => str_repeat('x', 5_000),
+        ]);
+        $store->recordToolCall(
+            's1',
+            'implement',
+            ['plugin' => 'Demo', 'class' => 'GreeterService', 'content' => '<?php'],
+            $large,
+            true,
+            true,
+            strlen($large),
+            false,
+        );
+        $throughSeq = $events->nextSeq() - 1;
+        $store->recordToolCall(
+            's1',
+            'edit',
+            ['plugin' => 'Demo', 'class' => 'GreeterService', 'search' => 'old', 'replace' => 'new'],
+            '{"ok":true,"class":"GreeterService","verified":"syntax"}',
+            true,
+            true,
+            awaitingConfirmation: false,
+        );
+        $latestSeq = $events->nextSeq() - 1;
+
+        $facts = $store->facts('s1')->operationalFacts($throughSeq);
+
+        self::assertSame($latestSeq, $facts['asOfSeq']);
+        self::assertCount(2, $facts['calls'], 'facts after the turn cut still need a structured route into the window');
+        self::assertTrue($facts['calls'][0]['coveredByCompaction']);
+        self::assertFalse($facts['calls'][1]['coveredByCompaction']);
+        self::assertFalse($facts['calls'][0]['stillCurrent'], 'the later edit names the same artifact');
+        self::assertSame('latest_recorded_call', $facts['calls'][0]['currentScope']);
+        self::assertTrue($facts['calls'][0]['resultTruncated']);
+        self::assertSame(600, $facts['calls'][0]['resultSummaryChars']);
+        self::assertIsString($facts['calls'][0]['resultSummary'], 'a cut JSON result remains an honest fragment');
+        self::assertSame(strlen($large), $facts['calls'][0]['resultChars']);
+    }
+
     public function testTheStoreExposesTheProjectionWithoutHandingOutTheStream(): void
     {
         $events = new InMemoryEventStore();

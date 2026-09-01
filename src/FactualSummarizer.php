@@ -101,6 +101,33 @@ final readonly class FactualSummarizer implements Summarizer
     }
 
     /**
+     * Append the machine-readable operational projection that prose cannot safely reconstruct.
+     *
+     * This is separate from {@see summarize()} so a host may replace the prose summarizer without
+     * replacing the facts. The projection remains local and deterministic: {@see SessionFacts} reads
+     * the session stream, applies the same narrow result/artifact/verification rules as recovery
+     * queries, and this method only serialises that value into the compacted window.
+     */
+    public function withOperationalFacts(string $summary, SessionFacts $facts, int $throughSeq): string
+    {
+        $encoded = json_encode(
+            $facts->operationalFacts($throughSeq),
+            \JSON_UNESCAPED_UNICODE
+                | \JSON_UNESCAPED_SLASHES
+                | \JSON_INVALID_UTF8_SUBSTITUTE
+                | \JSON_THROW_ON_ERROR,
+        );
+
+        return implode("\n", array_filter(
+            [
+                rtrim($summary),
+                'Operational facts (JSON; calls do not prove execution): ' . $encoded,
+            ],
+            static fn (string $line): bool => $line !== '',
+        ));
+    }
+
+    /**
      * @return array<string, int> nombre de herramienta => cuántas veces
      */
     private function herramientas(Session $session, int $throughSeq): array

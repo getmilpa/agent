@@ -187,6 +187,15 @@ call and cannot hallucinate. And a made-up summary is worse than expensive — i
 what happened*, and from then on the model works from a version of the session nobody wrote. Swap in
 your own `Summarizer` if you want prose.
 
+The replaceable prose is followed by a versioned operational-facts JSON block derived through
+`SessionFacts::operationalFacts()`. It retains bounded call results, documented artifact identities,
+explicit verification verdicts, execution receipts and their argument digests, decisions, evidence,
+and whether each call is still the latest recorded call for its artifact. Calls and executions stay
+separate: a call owns target/result data, while only an execution receipt proves materialisation, and
+the package does not join them without a producer-declared link. Execution-effect currentness is
+therefore reported as unknown rather than inferred. Supplying a custom `Summarizer` replaces only the
+prose; it cannot remove this structured continuity block.
+
 ## Autonomy modes
 
 `ask` pauses before anything that mutates. `acknowledge` announces and continues. `auto` runs to the
