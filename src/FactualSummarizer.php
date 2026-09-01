@@ -240,7 +240,12 @@ final readonly class FactualSummarizer implements Summarizer
             if (!\is_array($head)) {
                 continue;
             }
-            $seq = \is_int($head['seq'] ?? null) ? $head['seq'] : 0;
+            // The recorded age lives top-level on calls/executions and nested at source.seq on
+            // evidence entries. Reading only the top level made every evidence entry look like seq 0
+            // and drain FIRST — doctrinally backwards: evidence backs the dones, so it falls by its
+            // real age like everything else (caught by the adversarial verify of this very slice).
+            $seq = $head['seq'] ?? ($head['source']['seq'] ?? null);
+            $seq = \is_int($seq) ? $seq : 0;
             if ($seq < $oldestSeq) {
                 $oldestSeq = $seq;
                 $oldestKey = $key;

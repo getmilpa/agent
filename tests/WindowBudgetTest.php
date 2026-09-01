@@ -459,4 +459,27 @@ final class WindowBudgetTest extends TestCase
         self::assertStringContainsString('[window budget: elided; the full stream persists]', $summary);
         self::assertStringContainsString(FactualSummarizer::FACTS_LABEL, $summary, 'the facts contract survives the clamp');
     }
+    public function testEvidenceFallsByItsRecordedAgeNotFirst(): void
+    {
+        $facts = [
+            'calls' => [['seq' => 5, 'tool' => 'make', 'resultSummary' => str_repeat('a', 400)]],
+            'executions' => [['seq' => 8, 'operation' => 'make', 'digest' => str_repeat('b', 200)]],
+            'evidence' => [[
+                'kind' => 'test passed',
+                'reference' => str_repeat('c', 200),
+                'source' => ['event' => 'session.evidence_recorded', 'seq' => 12],
+            ]],
+            'decisions' => [],
+            'workState' => [],
+        ];
+        $whole = \strlen((string) json_encode($facts));
+
+        $fitted = FactualSummarizer::fitOperationalFacts($facts, $whole - 100);
+
+        self::assertSame([], $fitted['calls'], 'the OLDEST recorded fact (the call, seq 5) falls first');
+        self::assertCount(1, $fitted['executions'], 'younger than the call, still standing');
+        self::assertCount(1, $fitted['evidence'], 'evidence (seq 12) is the youngest — it must NOT drain first');
+        self::assertSame(1, $fitted['elided'], 'the drop is named, never silent');
+    }
+
 }
