@@ -85,6 +85,25 @@ final readonly class SessionProjector
                     'version' => \is_int($p['version'] ?? null) ? $p['version'] : 1,
                     'origin' => \is_string($p['origin'] ?? null) ? $p['origin'] : null,
                     'inheritedFrom' => \is_array($p['inheritedFrom'] ?? null) ? $p['inheritedFrom'] : null,
+                    // WHETHER A `done` IS BACKED BY VERIFIABLE EVIDENCE, so a stateless surface can
+                    // flag an unevidenced done without holding the whole fold. `null` where it does
+                    // not apply — a card that is not `done`, or a stream written before this existed,
+                    // which reads as «unknown», never as «verified».
+                    'evidenced' => \is_bool($p['evidenced'] ?? null) ? $p['evidenced'] : null,
+                ],
+            ],
+            // EVIDENCE IS ITS OWN KIND: it does not move a card, it VOUCHES for one. A surface paints
+            // it beside the todo it closes — or on its own when it is not yet tied — and the reference
+            // is the load-bearing part, because it is what a reader follows to re-check the claim.
+            SessionEvent::EvidenceRecorded => [
+                ...$base,
+                'kind' => 'evidence',
+                'card' => [
+                    'id' => \is_string($p['id'] ?? null) ? $p['id'] : '',
+                    'evidenceKind' => \is_string($p['kind'] ?? null) ? $p['kind'] : '',
+                    'reference' => \is_string($p['reference'] ?? null) ? $p['reference'] : '',
+                    'todo' => \is_string($p['todo'] ?? null) ? $p['todo'] : null,
+                    'detail' => \is_string($p['detail'] ?? null) ? $p['detail'] : null,
                 ],
             ],
             SessionEvent::PlanSet => [

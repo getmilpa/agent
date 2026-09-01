@@ -138,6 +138,30 @@ enum SessionEvent: string
     /** Un pendiente cambió de estado (P16.3). */
     case TodoChanged = 'session.todo_changed';
 
+    /**
+     * A piece of VERIFIABLE EVIDENCE entered the ledger — an artifact created, an operation that
+     * returned `ok:true`, or a test that passed — optionally tied to the todo it closes.
+     *
+     * ── WHY «DONE» NEEDED THIS EVENT ────────────────────────────────────────────────────────────
+     *
+     * A todo used to reach `done` on the agent's word alone, and a real audit caught the agent
+     * claiming progress it had not grounded. The answer is not more trust — it is a fact that POINTS
+     * at something a later reader can re-check ({@see \Milpa\Agent\Evidence}). This event is that fact.
+     *
+     * It is APPENDED, never rewritten, like everything else in this stream: evidence recorded for a
+     * todo stays even if the todo later moves, because the record of what once closed it is itself a
+     * thing an audit reads. And it is a fact of its own and not a field of `todo_changed`, for the same
+     * reason the execution receipt is not a field of the tool call: one operation can produce several
+     * pieces of evidence, and a todo can be closed by more than one — folding them into the transition
+     * would flatten a list into a line.
+     *
+     * DERIVED FROM SOMETHING REAL, never invented. Whoever records evidence with no reference records
+     * something that cannot be re-checked, and the completion gate refuses to close a todo on it — an
+     * unverifiable «evidence» is a claim with better typography, which is exactly what this event
+     * exists to stop being possible.
+     */
+    case EvidenceRecorded = 'session.evidence_recorded';
+
     /** El agente necesita una decisión que no es suya y la sesión queda en pausa (P16.4). */
     case QuestionAsked = 'session.question_asked';
 

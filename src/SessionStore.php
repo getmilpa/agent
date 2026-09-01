@@ -504,7 +504,103 @@ final readonly class SessionStore
             // antes había que deducir. `null` al nacer — una tarjeta que aparece no viene de ningún
             // lado, y decir que viene de `pending` sería inventar una columna que nunca ocupó.
             'from' => $cambio && $previo !== null ? $previo->status->value : null,
+            // WHETHER THIS DONE IS BACKED BY VERIFIABLE EVIDENCE, DERIVED and not declared.
+            //
+            // Only meaningful for a `done`; `null` otherwise. It is READ from the ledger at write
+            // time — «does this session already hold verifiable evidence tied to this todo?» — never
+            // taken as a caller's word, because a derived observation beats a declared assertion when
+            // both are available (the same rule {@see TodoOrigin} follows). The gate that closes a
+            // todo WITH evidence ({@see completeTodo()}) records that evidence first, so this reads
+            // true; a raw `done` with nothing behind it reads false and is NAMED, not censored — a
+            // surface flags it, exactly like {@see TodoOrigin::Unsupported}.
+            'evidenced' => $todo->status === TodoStatus::Done
+                ? ($session instanceof Session && $session->evidenceFor($todo->id) !== [])
+                : null,
         ]);
+    }
+
+    /**
+     * Records one piece of evidence into the session's ledger (D2, backlog).
+     *
+     * It refuses evidence that points at nothing: a piece with an empty reference cannot be
+     * re-checked, and recording it would let the ledger carry a claim wearing the word «evidence».
+     * That refusal is a caller error the author must see, not a silent no-op — the same way an
+     * ownership assertion without its signature is refused rather than stored as prose.
+     */
+    public function recordEvidence(string $id, Evidence $evidence): void
+    {
+        if (!$evidence->isVerifiable()) {
+            throw new \InvalidArgumentException(
+                'evidence must point at something a reader can re-check: a non-empty reference — a '
+                . 'path, an operation, a test. Evidence that cannot be re-checked is a claim, and the '
+                . 'ledger records evidence, not claims (D2).',
+            );
+        }
+
+        $this->append($id, SessionEvent::EvidenceRecorded, $evidence->toArray());
+    }
+
+    /**
+     * Closes a todo WITH its evidence — the sanctioned, fail-closed path to `done` (D2, backlog).
+     *
+     * ── WHY THIS EXISTS BESIDE {@see setTodo()} ─────────────────────────────────────────────────
+     *
+     * A todo used to reach `done` on the agent's word, and a real audit caught the agent claiming
+     * progress it had not grounded. This is the path that cannot do that: it REQUIRES a verifiable
+     * piece of evidence, ties it to the todo, records it, and only then moves the card. It fails
+     * closed — an unverifiable piece, or a todo that does not exist, is refused and NOTHING moves.
+     *
+     * The raw {@see setTodo()} stays for backward compatibility and for the honest recording of an
+     * unevidenced done (which it stamps `evidenced: false`, named not censored). This method is the
+     * one an operation reaches for when it means «done, and here is why».
+     */
+    public function completeTodo(string $id, string $todoId, Evidence $evidence): void
+    {
+        if (!$evidence->isVerifiable()) {
+            throw new \InvalidArgumentException(
+                'a todo cannot be closed on evidence that points at nothing: the evidence needs a '
+                . 'non-empty reference a reader can re-check (D2).',
+            );
+        }
+
+        $session = $this->load($id);
+        $tarjeta = null;
+        foreach ($session instanceof Session ? $session->todos : [] as $t) {
+            if ($t->id === $todoId) {
+                $tarjeta = $t;
+
+                break;
+            }
+        }
+
+        if ($tarjeta === null) {
+            throw new \InvalidArgumentException(sprintf(
+                'cannot close todo "%s": it is not a todo of this session. Evidence closes a todo '
+                . 'that exists, never one conjured at completion time (D2).',
+                $todoId,
+            ));
+        }
+
+        // Record the evidence FIRST, tied to this todo: the move to `done` reloads the session and
+        // reads the ledger, so with the evidence already in it the transition stamps `evidenced: true`
+        // on its own — one source, the ledger, and no second claim to keep in step.
+        $this->recordEvidence($id, $evidence->forTodo($todoId));
+        $this->setTodo($id, $tarjeta->withStatus(TodoStatus::Done));
+    }
+
+    /**
+     * The verifiable evidence tied to a todo — WHAT closed it (D2, backlog).
+     *
+     * The query the audit asks, answered from the session's fold. An empty list on a `done` todo is
+     * the flag that it reached `done` unevidenced.
+     *
+     * @return list<Evidence>
+     */
+    public function evidenceFor(string $id, string $todoId): array
+    {
+        $session = $this->load($id);
+
+        return $session instanceof Session ? $session->evidenceFor($todoId) : [];
     }
 
     /** Levanta la mano: la sesión queda en pausa hasta que alguien conteste (P16.4). */

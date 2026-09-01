@@ -129,7 +129,69 @@ final readonly class Session
          * @var array<string, list<?array<string, mixed>>>
          */
         public array $envelopes = [],
+        /**
+         * The session's EVIDENCE LEDGER — every piece recorded, in the order it was recorded.
+         *
+         * It is what lets a `done` mean more than the agent's word: a todo is verified when this
+         * ledger holds verifiable evidence tied to it ({@see evidenceFor()}). Kept whole and never
+         * pruned, because «what closed this todo» is an audit question and an audit reads the record,
+         * not a summary of it.
+         *
+         * @var list<Evidence>
+         */
+        public array $evidence = [],
     ) {
+    }
+
+    /**
+     * The verifiable evidence tied to a todo — WHAT closed it, read straight from the ledger.
+     *
+     * Only verifiable pieces count: one that points at nothing cannot be re-checked, so it cannot be
+     * what closed anything. This is the query the audit asks — given a todo, show the evidence — and
+     * it is answered from the stream's fold, never from a mutable flag on the card.
+     *
+     * @return list<Evidence>
+     */
+    public function evidenceFor(string $todoId): array
+    {
+        return array_values(array_filter(
+            $this->evidence,
+            static fn (Evidence $e): bool => $e->todo === $todoId && $e->isVerifiable(),
+        ));
+    }
+
+    /**
+     * Whether a todo is BOTH done AND backed by verifiable evidence.
+     *
+     * The two halves are separate on purpose: a done with an empty {@see evidenceFor()} is a done the
+     * ledger cannot vouch for, and that is precisely the state a surface must flag rather than hide.
+     */
+    public function isDoneVerified(string $todoId): bool
+    {
+        foreach ($this->todos as $todo) {
+            if ($todo->id === $todoId) {
+                return $todo->status === TodoStatus::Done && $this->evidenceFor($todoId) !== [];
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * The done todos the ledger cannot vouch for — done, but with no verifiable evidence tied to them.
+     *
+     * Not censored, NAMED: the system records what happened, and an unevidenced done is a fact worth
+     * seeing, not one to erase — the same doctrine {@see TodoOrigin::Unsupported} already applies at
+     * birth. A board paints these apart; a verifier counts them without having to deduce anything.
+     *
+     * @return list<Todo>
+     */
+    public function unverifiedDones(): array
+    {
+        return array_values(array_filter(
+            $this->todos,
+            fn (Todo $t): bool => $t->status === TodoStatus::Done && $this->evidenceFor($t->id) === [],
+        ));
     }
 
     /** Si la sesión sigue viva: ni terminada, ni esperando una respuesta humana, ni una secuencia pausada. */

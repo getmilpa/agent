@@ -52,6 +52,8 @@ final readonly class SessionReducer
         $parentId = null;
         /** @var array<string, Todo> $todos */
         $todos = [];
+        /** @var list<Evidence> $evidencias */
+        $evidencias = [];
         /** @var list<string> $permisos */
         $permisos = [];
         /** @var array<string, list<?array<string, mixed>>> $sobres operación → sobres, null = sí pelón */
@@ -176,6 +178,11 @@ final readonly class SessionReducer
                         $todos[\is_string($p['id'] ?? null) ? $p['id'] : ''] ?? null,
                     ),
                 ],
+                // EVIDENCE ACCUMULATES, it is never overwritten: a todo may be closed by more than
+                // one piece, and the record of what once closed it stays even after the todo moves.
+                // The fold keeps the whole ledger so {@see Session::evidenceFor()} can answer, for any
+                // todo, exactly what was cited to close it — read from the stream, never re-derived.
+                SessionEvent::EvidenceRecorded => $evidencias[] = Evidence::fromArray($p),
                 SessionEvent::QuestionAsked => $pregunta = PendingQuestion::fromArray($p),
                 // Contestar cierra la pregunta ABIERTA, y la respuesta entra como turno: es contexto
                 // que el modelo necesita en el siguiente paso, no metadato.
@@ -339,6 +346,7 @@ final readonly class SessionReducer
             decisions: $decisiones,
             endedBecause: $terminada,
             ownershipAssertion: $ownership,
+            evidence: $evidencias,
         );
     }
 
