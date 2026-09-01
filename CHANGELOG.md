@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.36.0](https://github.com/getmilpa/agent/compare/v0.35.0...v0.36.0) (2026-09-01)
+
+
+### ⚠ BREAKING CHANGES
+
+* the raw door to done closes — completeTodo is the only path (greenhouse decisions/0183) ([#75](https://github.com/getmilpa/agent/issues/75))
+
+### Features
+
+* the raw door to done closes — completeTodo is the only path (greenhouse decisions/0183) ([#75](https://github.com/getmilpa/agent/issues/75)) ([1614e2d](https://github.com/getmilpa/agent/commit/1614e2d813ac77b440739fa1e4922e79bff3eb1a))
+
 ## [0.35.0](https://github.com/getmilpa/agent/compare/v0.34.0...v0.35.0) (2026-09-01)
 
 
