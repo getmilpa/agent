@@ -16,8 +16,10 @@ namespace Milpa\Agent\Tests;
 
 use Milpa\Agent\PendingQuestion;
 use Milpa\Agent\Principal;
+use Milpa\Agent\SessionEvent;
 use Milpa\Agent\SessionFacts;
 use Milpa\Agent\SessionStore;
+use Milpa\EventStore\Event;
 use Milpa\EventStore\InMemoryEventStore;
 use PHPUnit\Framework\TestCase;
 
@@ -414,6 +416,156 @@ final class SessionFactsTest extends TestCase
 
         self::assertFalse($known->lastCallForArtifact('')['ok']);
         self::assertFalse($known->operationResult('')['ok']);
+        self::assertFalse($known->operationResult('implement', '   ')['ok']);
+        self::assertFalse($known->lastVerificationOf('   ')['ok']);
+    }
+
+    public function testOperationResultSkipsNonCallEventsAndOtherTools(): void
+    {
+        $events = new InMemoryEventStore();
+        $store = new SessionStore($events);
+        $store->start('s1', 'recover one make');
+        $store->recordToolCall(
+            's1',
+            'make',
+            ['what' => 'service', 'plugin' => 'Demo', 'name' => 'GreeterService'],
+            '{"ok":true}',
+        );
+        $store->recordToolCall(
+            's1',
+            'make',
+            ['what' => 'service', 'plugin' => 'Demo', 'name' => 'OtherService'],
+            '{"ok":true}',
+        );
+        $store->recordToolCall('s1', 'validate', ['target' => 'OtherPlugin'], '{"ok":true,"checks":[]}');
+        $store->recordTurn('s1', 'assistant', 'done');
+
+        $result = SessionFacts::of($events, 's1')->operationResult('make', 'GreeterService');
+
+        self::assertTrue($result['ok']);
+        self::assertSame('make', $result['call']['operation']);
+    }
+
+    public function testAClosedAnswerWindowClearsTheQuestionWithoutInventingADecision(): void
+    {
+        $events = new InMemoryEventStore();
+        $store = new SessionStore($events);
+        $store->start('s1', 'wait for authority');
+        $store->ask('s1', new PendingQuestion(
+            'q1',
+            'Still authorised?',
+            expiresAt: '2026-08-01T10:00:00+00:00',
+        ));
+
+        self::assertTrue($store->expireIfDue('s1', new \DateTimeImmutable('2026-08-01T10:00:01+00:00')));
+        self::assertFalse(SessionFacts::of($events, 's1')->lastDecision()['ok']);
+    }
+
+    public function testAnAnswerWithoutAnOpenQuestionPreservesTheGap(): void
+    {
+        $events = new InMemoryEventStore();
+        $store = new SessionStore($events);
+        $store->start('s1', 'read malformed history');
+        $store->answer('s1', 'orphan-answer', 'yes');
+
+        $result = SessionFacts::of($events, 's1')->lastDecision();
+
+        self::assertTrue($result['ok']);
+        self::assertNull($result['decision']['questionId']);
+        self::assertNull($result['decision']['idMatches']);
+        self::assertNull($result['decision']['question']);
+        self::assertNull($result['decision']['evidence']['question']);
+    }
+
+    public function testMalformedToolPayloadsFailSoftlyInTheProjection(): void
+    {
+        $events = new InMemoryEventStore();
+        $store = new SessionStore($events);
+        $store->start('s1', 'read a foreign stream');
+        $events->append(new Event(
+            streamId: SessionStore::PREFIX . 's1',
+            type: SessionEvent::ToolCalled->value,
+            payload: [
+                'tool' => 'implement',
+                'arguments' => 'not-an-array',
+                'result' => ['ok' => true, 'verified' => 'foreign structured result'],
+                'ok' => true,
+                'mutating' => true,
+            ],
+            seq: $events->nextSeq(),
+        ));
+
+        $result = SessionFacts::of($events, 's1')->operationResult('implement');
+
+        self::assertTrue($result['ok']);
+        self::assertSame([], $result['call']['target']);
+        self::assertSame(['ok' => true, 'verified' => 'foreign structured result'], $result['call']['result']);
+        self::assertGreaterThan(0, $result['call']['resultStoredChars']);
+    }
+
+    public function testValidateAndArtifactContractSpellingsUseDeclaredIdentitySchemas(): void
+    {
+        $events = new InMemoryEventStore();
+        $store = new SessionStore($events);
+        $store->start('s1', 'recover validation facts');
+        $store->recordToolCall(
+            's1',
+            'validate',
+            ['target' => 'HealthyPlugin'],
+            (string) json_encode([
+                'ok' => true,
+                'target' => 'HealthyPlugin',
+                'manifest' => 'plugins/HealthyPlugin/milpa.json',
+                'checks' => ['manifest' => ['ok' => true, 'findings' => []]],
+            ]),
+        );
+        $store->recordToolCall('s1', 'artifact:contract', ['name' => 'Alpha'], '{"ok":true}');
+        $store->recordToolCall('s1', 'artifact.contract', ['name' => 'Beta'], '{"ok":true}');
+
+        $facts = SessionFacts::of($events, 's1');
+
+        self::assertTrue($facts->lastCallForArtifact('plugins/HealthyPlugin/milpa.json')['ok']);
+        self::assertTrue($facts->lastCallForArtifact('Alpha')['ok']);
+        self::assertTrue($facts->lastCallForArtifact('Beta')['ok']);
+        self::assertTrue($facts->lastVerificationOf('HealthyPlugin')['verification']['verified']);
+    }
+
+    public function testMalformedVerificationContractsAreNeverPromoted(): void
+    {
+        $events = new InMemoryEventStore();
+        $store = new SessionStore($events);
+        $store->start('s1', 'read malformed verification facts');
+        $store->recordToolCall(
+            's1',
+            'implement',
+            ['plugin' => 'Demo', 'class' => 'TextResult'],
+            'not-json',
+        );
+        $store->recordToolCall(
+            's1',
+            'implement',
+            ['plugin' => 'Demo', 'class' => 'MissingVerdict'],
+            '{"ok":true,"verified":""}',
+        );
+        $store->recordToolCall(
+            's1',
+            'make',
+            ['what' => 'entity', 'plugin' => 'Demo', 'name' => 'MissingVerify'],
+            '{"ok":true,"verify":null}',
+        );
+        $store->recordToolCall(
+            's1',
+            'validate',
+            ['target' => 'MalformedChecks'],
+            '{"ok":true,"checks":"not-an-array"}',
+        );
+
+        $facts = SessionFacts::of($events, 's1');
+
+        self::assertFalse($facts->lastVerificationOf('TextResult')['ok']);
+        self::assertFalse($facts->lastVerificationOf('MissingVerdict')['ok']);
+        self::assertFalse($facts->lastVerificationOf('MissingVerify')['ok']);
+        self::assertFalse($facts->lastVerificationOf('MalformedChecks')['ok']);
     }
 
     public function testTheStoreExposesTheProjectionWithoutHandingOutTheStream(): void
