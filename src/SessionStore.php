@@ -957,6 +957,17 @@ final readonly class SessionStore
     }
 
     /**
+     * Narrow recovery queries over this session's stream, without handing raw events to a surface.
+     *
+     * The full {@see observation()} remains the audit view. This projection answers one ordinary
+     * recovery question at a time and returns only the fact that supports it.
+     */
+    public function facts(string $id): SessionFacts
+    {
+        return SessionFacts::of($this->events, $id);
+    }
+
+    /**
      * Lo que se puede observar de esta sesión — el hecho común, antes de proyectarlo.
      *
      * Vive aquí y no en quien pinta, para que ninguna superficie tenga que alcanzar el stream por su
