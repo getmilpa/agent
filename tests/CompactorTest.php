@@ -12,6 +12,7 @@ use Milpa\Agent\Session;
 use Milpa\Agent\SessionEvent;
 use Milpa\Agent\SessionStore;
 use Milpa\Agent\Summarizer;
+use Milpa\Agent\Tests\Support\LegacyTodoWriter;
 use Milpa\Agent\Todo;
 use Milpa\Agent\TodoStatus;
 use Milpa\EventStore\InMemoryEventStore;
@@ -163,10 +164,12 @@ final class CompactorTest extends TestCase
      */
     public function testTheDefaultSummaryCarriesTheFactsTheStreamAlreadyKnows(): void
     {
-        $almacen = new SessionStore(new InMemoryEventStore());
+        $eventos = new InMemoryEventStore();
+        $almacen = new SessionStore($eventos);
         $almacen->start('s1', 'migrar Inventario a sqlite');
         $almacen->setPlan('s1', '1. entidad  2. controller');
-        $almacen->setTodo('s1', new Todo('t1', 'escribir la entidad', TodoStatus::Done));
+        // A historical bare done, raw-appended: the graduated door no longer writes one (0183).
+        LegacyTodoWriter::write($eventos, 's1', new Todo('t1', 'escribir la entidad', TodoStatus::Done));
         $almacen->setTodo('s1', new Todo('t2', 'escribir el controller'));
         $almacen->setTodo('s1', new Todo('t3', 'migrar los datos', TodoStatus::Blocked));
         $almacen->grant('s1', 'make');

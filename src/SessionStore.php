@@ -450,8 +450,41 @@ final readonly class SessionStore
      *
      * Como con el plan: re-declarar la MISMA tarjeta —mismo texto, mismo estado— no supersede nada y
      * no avanza la versión, pero el evento se apenda igual, porque ocurrió.
+     *
+     * ── THE TRANSITION TO `done` DOES NOT EXIST HERE (greenhouse decisions/0183) ────────────────
+     *
+     * The D2 ledger chose record-and-flag deliberately: a bare done landed stamped
+     * `evidenced: false`, named not censored. The graduation ruling ends that compat — not «the
+     * agent should not», not «the house warns», but «the wrong transition does not exist». Any
+     * write INTO `done` — creating a card done, or moving one there — is refused with the door
+     * named: {@see completeTodo()}, where the claim travels WITH the evidence that backs it and
+     * the house judges it. Old streams carrying bare dones still load and project
+     * ({@see Session::unverifiedDones()} keeps naming them): history is tolerated, new writes are
+     * governed — only the write door changed, never the fold.
      */
     public function setTodo(string $id, Todo $todo): void
+    {
+        if ($todo->status === TodoStatus::Done) {
+            throw new \LogicException(
+                'a done without evidence does not exist: the transition to `done` is not this '
+                . 'door\'s to write. Claim it via completeTodo() with the Evidence that backs it, '
+                . 'and the house will judge whether the evidence covers the claim (greenhouse '
+                . 'decisions/0183).',
+            );
+        }
+
+        $this->writeTodo($id, $todo);
+    }
+
+    /**
+     * The one writer of `session.todo_changed`, shared by {@see setTodo()} and {@see completeTodo()}.
+     *
+     * Private ON PURPOSE (greenhouse decisions/0183): being the only way to append the event, the
+     * refusal above cannot be bypassed from outside, and the sanctioned completion path cannot trip
+     * on it. Everything derived here — version, origin, lineage, the `evidenced` stamp — is
+     * computed at write time from the fold, never taken from the caller.
+     */
+    private function writeTodo(string $id, Todo $todo): void
     {
         $session = $this->load($id);
         $previo = null;
@@ -509,10 +542,11 @@ final readonly class SessionStore
             // Only meaningful for a `done`; `null` otherwise. It is READ from the ledger at write
             // time — «does this session already hold verifiable evidence tied to this todo?» — never
             // taken as a caller's word, because a derived observation beats a declared assertion when
-            // both are available (the same rule {@see TodoOrigin} follows). The gate that closes a
-            // todo WITH evidence ({@see completeTodo()}) records that evidence first, so this reads
-            // true; a raw `done` with nothing behind it reads false and is NAMED, not censored — a
-            // surface flags it, exactly like {@see TodoOrigin::Unsupported}.
+            // both are available (the same rule {@see TodoOrigin} follows). The only remaining door
+            // to `done` ({@see completeTodo()}) records the evidence first, so a NEW done always
+            // reads true; a `false` can only come from replaying a stream that predates the
+            // graduation, and there it stays NAMED, not censored — a surface flags it, exactly like
+            // {@see TodoOrigin::Unsupported}.
             'evidenced' => $todo->status === TodoStatus::Done
                 ? ($session instanceof Session && $session->evidenceFor($todo->id) !== [])
                 : null,
@@ -550,9 +584,10 @@ final readonly class SessionStore
      * piece of evidence, ties it to the todo, records it, and only then moves the card. It fails
      * closed — an unverifiable piece, or a todo that does not exist, is refused and NOTHING moves.
      *
-     * The raw {@see setTodo()} stays for backward compatibility and for the honest recording of an
-     * unevidenced done (which it stamps `evidenced: false`, named not censored). This method is the
-     * one an operation reaches for when it means «done, and here is why».
+     * Since the graduation (greenhouse decisions/0183) this is the ONLY path to `done`: the raw
+     * {@see setTodo()} refuses the transition outright, so an unevidenced done can no longer be
+     * written — it can only be read back from streams that predate the law. Both doors share one
+     * private writer, so the refusal cannot be bypassed and this path cannot trip on it.
      */
     public function completeTodo(string $id, string $todoId, Evidence $evidence): void
     {
@@ -585,7 +620,7 @@ final readonly class SessionStore
         // reads the ledger, so with the evidence already in it the transition stamps `evidenced: true`
         // on its own — one source, the ledger, and no second claim to keep in step.
         $this->recordEvidence($id, $evidence->forTodo($todoId));
-        $this->setTodo($id, $tarjeta->withStatus(TodoStatus::Done));
+        $this->writeTodo($id, $tarjeta->withStatus(TodoStatus::Done));
     }
 
     /**

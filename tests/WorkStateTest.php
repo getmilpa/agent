@@ -19,6 +19,7 @@ use Milpa\Agent\SessionEvent;
 use Milpa\Agent\SessionFacts;
 use Milpa\Agent\SessionProjector;
 use Milpa\Agent\SessionStore;
+use Milpa\Agent\Tests\Support\LegacyTodoWriter;
 use Milpa\Agent\Todo;
 use Milpa\Agent\TodoStatus;
 use Milpa\EventStore\Event;
@@ -503,7 +504,8 @@ final class WorkStateTest extends TestCase
             true,
         );
         // The raw done: the agent's word, with nothing behind it — visible as such on the card.
-        $store->setTodo('s1', new Todo('t1', 'construir la pantalla Lista', TodoStatus::Done));
+        // History-simulated since the graduation (0183): the door itself refuses to write one.
+        LegacyTodoWriter::write($events, 's1', new Todo('t1', 'construir la pantalla Lista', TodoStatus::Done));
 
         $cards = (new SessionProjector())->boardCards($events->replay(SessionStore::PREFIX . 's1'));
         $todoCard = null;
@@ -525,7 +527,7 @@ final class WorkStateTest extends TestCase
         $events = new InMemoryEventStore();
         $store = new SessionStore($events);
         $store->start('s1', 'x');
-        $store->setTodo('s1', new Todo('t1', 'think about the roadmap', TodoStatus::Done));
+        LegacyTodoWriter::write($events, 's1', new Todo('t1', 'think about the roadmap', TodoStatus::Done));
 
         $cards = (new SessionProjector())->boardCards($events->replay(SessionStore::PREFIX . 's1'));
 
@@ -559,7 +561,7 @@ final class WorkStateTest extends TestCase
             false,
             true,
         );
-        $store->setTodo('s1', new Todo('t1', 'GreeterService saluda en la pantalla Lista', TodoStatus::Done));
+        LegacyTodoWriter::write($events, 's1', new Todo('t1', 'GreeterService saluda en la pantalla Lista', TodoStatus::Done));
 
         $state = $store->facts('s1')->workStateForTodo('t1');
 

@@ -9,6 +9,7 @@ use Milpa\Agent\PendingQuestion;
 use Milpa\Agent\SessionStore;
 use Milpa\Agent\Todo;
 use Milpa\Agent\TodoStatus;
+use Milpa\EventStore\EventStoreInterface;
 
 /**
  * One deterministic long session, built the same way every time it is asked for.
@@ -21,15 +22,21 @@ final class GoldenSessionFixture
 {
     public const ID = 'golden-1';
 
-    /** Populate `$store` with the fixture session and return its id. */
-    public static function build(SessionStore $store): string
+    /**
+     * Populate the fixture session and return its id.
+     *
+     * `$events` must be the store's own event store: the two bare dones are raw-appended as the
+     * HISTORY they now are (greenhouse decisions/0183 — the graduated door refuses to write one),
+     * with the exact pre-graduation payload, so the golden bytes stay what an old stream composes.
+     */
+    public static function build(SessionStore $store, EventStoreInterface $events): string
     {
         $store->start(self::ID, 'migrate the Inventario plugin to sqlite');
         $store->setPlan(self::ID, '1. entity  2. repository  3. controller');
-        $store->setTodo(self::ID, new Todo('t1', 'write the entity', TodoStatus::Done));
+        LegacyTodoWriter::write($events, self::ID, new Todo('t1', 'write the entity', TodoStatus::Done));
         $store->setTodo(self::ID, new Todo('t2', 'write the repository'));
         $store->setTodo(self::ID, new Todo('t3', 'migrate the data', TodoStatus::Blocked));
-        $store->setTodo(self::ID, new Todo('t4', 'write the controller', TodoStatus::Done));
+        LegacyTodoWriter::write($events, self::ID, new Todo('t4', 'write the controller', TodoStatus::Done));
         $store->grant(self::ID, 'make');
         $store->grant(self::ID, 'edit');
 

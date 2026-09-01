@@ -35,8 +35,9 @@ final class NullBudgetGoldenTest extends TestCase
     /** @return array{store: SessionStore, id: string} */
     private function compactedFixture(): array
     {
-        $store = new SessionStore(new InMemoryEventStore());
-        $id = GoldenSessionFixture::build($store);
+        $events = new InMemoryEventStore();
+        $store = new SessionStore($events);
+        $id = GoldenSessionFixture::build($store, $events);
         $session = $store->load($id) ?? self::fail('fixture session did not load');
         self::assertNotNull(
             (new Compactor(maxTurns: 20, keepRecent: 5))->compactIfNeeded($store, $session),
