@@ -45,6 +45,9 @@ final readonly class SessionFacts
     /** Maximum raw result characters returned by an ordinary recovery query. */
     private const MAX_RESULT_CHARS = 4_000;
 
+    /** Maximum result characters carried back into the model window by compaction. */
+    private const MAX_COMPACTED_RESULT_CHARS = 600;
+
     /** Maximum characters returned for a verification's detail. */
     private const MAX_DETAIL_CHARS = 2_000;
 
@@ -61,6 +64,53 @@ final readonly class SessionFacts
     public static function of(EventStoreInterface $events, string $session): self
     {
         return new self($session, $events->replay(SessionStore::PREFIX . $session));
+    }
+
+    /**
+     * Structured facts at compaction time, derived from the same stream as every query.
+     *
+     * Calls and executions remain separate. A call owns target/result data; an execution receipt owns
+     * materialisation and the arguments digest. Without a producer-declared link, combining them would
+     * turn temporal proximity into evidence. `stillCurrent` therefore describes only whether a call is
+     * the latest recorded call for its named artifact as of `asOfSeq`; execution-effect currentness is
+     * `null` because this stream declares no supersession contract for effects. Each item declares
+     * whether its sequence is behind the turn cut; facts after the cut still belong here because
+     * execution and evidence events are not turns and have no other route into the model window.
+     *
+     * @return array<string, mixed>
+     */
+    public function operationalFacts(int $throughSeq): array
+    {
+        $asOfSeq = 0;
+        foreach ($this->events as $event) {
+            if ($event->type !== SessionEvent::Compacted->value) {
+                $asOfSeq = max($asOfSeq, $event->seq);
+            }
+        }
+
+        $calls = [];
+        $executions = [];
+        $evidence = [];
+        foreach ($this->events as $event) {
+            if ($event->type === SessionEvent::ToolCalled->value) {
+                $calls[] = $this->operationalCall($event, $asOfSeq, $event->seq <= $throughSeq);
+            } elseif ($event->type === SessionEvent::OperationExecuted->value) {
+                $executions[] = $this->executionFact($event, $asOfSeq, $event->seq <= $throughSeq);
+            } elseif ($event->type === SessionEvent::EvidenceRecorded->value) {
+                $evidence[] = $this->evidenceFact($event, $event->seq <= $throughSeq);
+            }
+        }
+
+        return [
+            'schema' => 'milpa.agent.operational-facts.v1',
+            'session' => $this->session,
+            'throughSeq' => $throughSeq,
+            'asOfSeq' => $asOfSeq,
+            'calls' => $calls,
+            'executions' => $executions,
+            'decisions' => $this->decisionsThrough($throughSeq),
+            'evidence' => $evidence,
+        ];
     }
 
     /**
@@ -191,14 +241,109 @@ final readonly class SessionFacts
      */
     public function lastDecision(): array
     {
-        $openQuestion = null;
-        $lastQuestion = null;
-        $lastAnswer = null;
+        $decisions = $this->decisionsThrough(\PHP_INT_MAX);
+        if ($decisions === []) {
+            return $this->notFound('this session has no answered decision');
+        }
 
+        return [
+            'ok' => true,
+            'session' => $this->session,
+            'decision' => $decisions[array_key_last($decisions)],
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function operationalCall(Event $event, int $asOfSeq, bool $coveredByCompaction): array
+    {
+        $payload = $event->payload;
+        $decoded = $this->decodeResult($payload['result'] ?? '');
+        $result = $this->resultProjection(
+            $payload['result'] ?? '',
+            \is_int($payload['resultChars'] ?? null) ? $payload['resultChars'] : null,
+            self::MAX_COMPACTED_RESULT_CHARS,
+        );
+        $artifacts = array_values(array_unique($this->artifactIdentities($event), \SORT_REGULAR));
+        $verification = null;
+        $declaration = $this->verificationDeclaration($event, $decoded);
+        if ($declaration !== null) {
+            $detail = $this->boundedValue($declaration['detail'], self::MAX_DETAIL_CHARS);
+            $verification = [
+                'verified' => $declaration['verified'],
+                'detail' => $detail['value'],
+                'detailChars' => $detail['chars'],
+                'detailTruncated' => $detail['truncated'],
+            ];
+        }
+
+        return [
+            'seq' => $event->seq,
+            'operation' => \is_string($payload['tool'] ?? null) ? $payload['tool'] : '?',
+            'target' => $this->targetArguments($payload['arguments'] ?? null),
+            'succeeded' => $this->callSucceeded($payload, $decoded),
+            'mutating' => ($payload['mutating'] ?? false) === true,
+            'awaitingConfirmation' => \is_bool($payload['awaitingConfirmation'] ?? null)
+                ? $payload['awaitingConfirmation']
+                : null,
+            'resultSummary' => $result['value'],
+            'resultChars' => $result['declaredChars'],
+            'resultStoredChars' => $result['storedChars'],
+            'resultSummaryChars' => $result['returnedChars'],
+            'resultTruncated' => $result['truncated'],
+            'artifacts' => $artifacts,
+            'verification' => $verification,
+            'stillCurrent' => $artifacts === [] ? null : ! $this->hasLaterCallForAny($event, $artifacts),
+            'currentScope' => $artifacts === [] ? 'unknown' : 'latest_recorded_call',
+            'currentAsOfSeq' => $asOfSeq,
+            'coveredByCompaction' => $coveredByCompaction,
+            'source' => ['event' => SessionEvent::ToolCalled->value, 'seq' => $event->seq],
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function executionFact(Event $event, int $asOfSeq, bool $coveredByCompaction): array
+    {
+        $payload = $event->payload;
+
+        return [
+            'seq' => $event->seq,
+            'operation' => \is_string($payload['operation'] ?? null) ? $payload['operation'] : '?',
+            'argumentsDigest' => \is_string($payload['arguments_digest'] ?? null) ? $payload['arguments_digest'] : null,
+            'executedBy' => \is_array($payload['executed_by'] ?? null) ? $payload['executed_by'] : null,
+            'authorizedBy' => \is_array($payload['authorized_by'] ?? null) ? $payload['authorized_by'] : null,
+            'stillCurrent' => null,
+            'currentScope' => 'effect_currentness_not_declared',
+            'currentAsOfSeq' => $asOfSeq,
+            'coveredByCompaction' => $coveredByCompaction,
+            'source' => ['event' => SessionEvent::OperationExecuted->value, 'seq' => $event->seq],
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function evidenceFact(Event $event, bool $coveredByCompaction): array
+    {
+        $evidence = Evidence::fromArray($event->payload);
+
+        return [
+            ...$evidence->toArray(),
+            'verifiable' => $evidence->isVerifiable(),
+            'coveredByCompaction' => $coveredByCompaction,
+            'source' => ['event' => SessionEvent::EvidenceRecorded->value, 'seq' => $event->seq],
+        ];
+    }
+
+    /**
+     * Answered decisions paired by the canonical reducer's open-question fold and marked against the cut.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function decisionsThrough(int $throughSeq): array
+    {
+        $openQuestion = null;
+        $decisions = [];
         foreach ($this->events as $event) {
             $type = SessionEvent::tryFrom($event->type);
             if ($type === SessionEvent::QuestionAsked) {
-                // Same fold as SessionReducer: the latest question is the one currently open.
                 $openQuestion = $event;
 
                 continue;
@@ -212,46 +357,37 @@ final readonly class SessionFacts
                 continue;
             }
 
-            // Pair with what was OPEN, not with a backward search by id. The canonical reducer does
-            // exactly this; if the answer carries another id, the disagreement is exposed below.
-            $lastQuestion = $openQuestion;
-            $lastAnswer = $event;
-            $openQuestion = null;
-        }
-
-        if (! $lastAnswer instanceof Event) {
-            return $this->notFound('this session has no answered decision');
-        }
-
-        $answerId = \is_string($lastAnswer->payload['id'] ?? null) ? $lastAnswer->payload['id'] : '';
-        $questionPayload = $lastQuestion instanceof Event ? $lastQuestion->payload : [];
-        $questionId = $lastQuestion instanceof Event && \is_string($questionPayload['id'] ?? null)
-            ? $questionPayload['id']
-            : null;
-
-        return [
-            'ok' => true,
-            'session' => $this->session,
-            'decision' => [
+            $questionPayload = $openQuestion instanceof Event ? $openQuestion->payload : [];
+            $answerId = \is_string($event->payload['id'] ?? null) ? $event->payload['id'] : '';
+            $questionId = $openQuestion instanceof Event && \is_string($questionPayload['id'] ?? null)
+                ? $questionPayload['id']
+                : null;
+            $decisions[] = [
                 'id' => $answerId,
                 'questionId' => $questionId,
                 'idMatches' => $questionId === null ? null : $questionId === $answerId,
-                'question' => $lastQuestion instanceof Event
+                'question' => $openQuestion instanceof Event
                     ? (\is_string($questionPayload['question'] ?? null) ? $questionPayload['question'] : '')
                     : null,
-                'answer' => \is_string($lastAnswer->payload['answer'] ?? null) ? $lastAnswer->payload['answer'] : '',
+                'answer' => \is_string($event->payload['answer'] ?? null) ? $event->payload['answer'] : '',
                 'reason' => \is_string($questionPayload['reason'] ?? null) ? $questionPayload['reason'] : null,
                 'why' => \is_string($questionPayload['why'] ?? null) ? $questionPayload['why'] : null,
-                'by' => \is_array($lastAnswer->payload['by'] ?? null) ? $lastAnswer->payload['by'] : null,
-                'executor' => \is_string($lastAnswer->payload['executor'] ?? null) ? $lastAnswer->payload['executor'] : null,
+                'by' => \is_array($event->payload['by'] ?? null) ? $event->payload['by'] : null,
+                'executor' => \is_string($event->payload['executor'] ?? null) ? $event->payload['executor'] : null,
                 'evidence' => [
-                    'question' => $lastQuestion instanceof Event
-                        ? ['event' => SessionEvent::QuestionAsked->value, 'seq' => $lastQuestion->seq]
+                    'question' => $openQuestion instanceof Event
+                        ? ['event' => SessionEvent::QuestionAsked->value, 'seq' => $openQuestion->seq]
                         : null,
-                    'answer' => ['event' => SessionEvent::QuestionAnswered->value, 'seq' => $lastAnswer->seq],
+                    'answer' => ['event' => SessionEvent::QuestionAnswered->value, 'seq' => $event->seq],
                 ],
-            ],
-        ];
+            ];
+            if ($throughSeq !== \PHP_INT_MAX) {
+                $decisions[array_key_last($decisions)]['coveredByCompaction'] = $event->seq <= $throughSeq;
+            }
+            $openQuestion = null;
+        }
+
+        return $decisions;
     }
 
     /** @return array<string, mixed> */
@@ -263,10 +399,6 @@ final readonly class SessionFacts
             $payload['result'] ?? '',
             \is_int($payload['resultChars'] ?? null) ? $payload['resultChars'] : null,
         );
-        $succeeded = ($payload['ok'] ?? true) === true;
-        if (\is_array($decoded) && \is_bool($decoded['ok'] ?? null)) {
-            $succeeded = $succeeded && $decoded['ok'];
-        }
 
         $answer = [
             'ok' => true,
@@ -275,7 +407,7 @@ final readonly class SessionFacts
                 'seq' => $event->seq,
                 'operation' => \is_string($payload['tool'] ?? null) ? $payload['tool'] : '?',
                 'target' => $this->targetArguments($payload['arguments'] ?? null),
-                'succeeded' => $succeeded,
+                'succeeded' => $this->callSucceeded($payload, $decoded),
                 'mutating' => ($payload['mutating'] ?? false) === true,
                 'awaitingConfirmation' => \is_bool($payload['awaitingConfirmation'] ?? null)
                     ? $payload['awaitingConfirmation']
@@ -292,6 +424,40 @@ final readonly class SessionFacts
         }
 
         return $answer;
+    }
+
+    /** @param array<string, mixed> $payload */
+    private function callSucceeded(array $payload, mixed $decoded): bool
+    {
+        $succeeded = ($payload['ok'] ?? true) === true;
+        if (\is_array($decoded) && \is_bool($decoded['ok'] ?? null)) {
+            $succeeded = $succeeded && $decoded['ok'];
+        }
+
+        return $succeeded;
+    }
+
+    /**
+     * Whether a later call names any artifact identity carried by this call.
+     *
+     * This establishes only the latest recorded CALL. It does not infer that either call executed.
+     *
+     * @param list<array{kind: string, value: string}> $artifacts
+     */
+    private function hasLaterCallForAny(Event $call, array $artifacts): bool
+    {
+        foreach ($this->events as $event) {
+            if ($event->seq <= $call->seq || $event->type !== SessionEvent::ToolCalled->value) {
+                continue;
+            }
+            foreach ($artifacts as $artifact) {
+                if ($this->matchesArtifact($event, $artifact['value'])) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -448,7 +614,7 @@ final readonly class SessionFacts
     /**
      * @return array{value: mixed, declaredChars: int|null, storedChars: int, returnedChars: int, truncated: bool|null}
      */
-    private function resultProjection(mixed $result, ?int $declaredChars): array
+    private function resultProjection(mixed $result, ?int $declaredChars, int $limit = self::MAX_RESULT_CHARS): array
     {
         if (\is_string($result)) {
             $raw = $result;
@@ -458,8 +624,8 @@ final readonly class SessionFacts
         }
 
         $storedChars = mb_strlen($raw);
-        $projectionCut = $storedChars > self::MAX_RESULT_CHARS;
-        $returned = $projectionCut ? mb_substr($raw, 0, self::MAX_RESULT_CHARS) : $this->decodeResult($result);
+        $projectionCut = $storedChars > $limit;
+        $returned = $projectionCut ? mb_substr($raw, 0, $limit) : $this->decodeResult($result);
         $returnedChars = $projectionCut ? mb_strlen($returned) : $storedChars;
         $cutBeforeStore = $declaredChars === null ? null : $declaredChars > $storedChars;
 

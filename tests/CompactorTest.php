@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace Milpa\Agent\Tests;
 
 use Milpa\Agent\Compactor;
+use Milpa\Agent\Evidence;
 use Milpa\Agent\FactualSummarizer;
 use Milpa\Agent\PendingQuestion;
 use Milpa\Agent\Session;
+use Milpa\Agent\SessionEvent;
 use Milpa\Agent\SessionStore;
 use Milpa\Agent\Summarizer;
 use Milpa\Agent\Todo;
@@ -144,6 +146,11 @@ final class CompactorTest extends TestCase
         $resumen = $compactador->compactIfNeeded($almacen, $almacen->load('s1') ?? self::fail('sin sesión'));
 
         self::assertStringContainsString('resumen a la medida', (string) $resumen);
+        self::assertStringContainsString(
+            'Operational facts (JSON; calls do not prove execution): ',
+            (string) $resumen,
+            'custom prose must not replace the structured continuity contract',
+        );
     }
 
     /**
@@ -231,5 +238,124 @@ final class CompactorTest extends TestCase
         $despues = $almacen->load('s1') ?? self::fail('sin sesion');
         self::assertCount(8, $despues->turns, 'el stream conserva los 8 integros');
         self::assertGreaterThan(0, $despues->compactedThrough, 'compacto hasta un corte');
+    }
+
+    /**
+     * A real cut must preserve the structured facts the covered tool turn used to expose.
+     *
+     * The call and execution stay separate on purpose: a tool call owns its target and result, while
+     * an execution receipt alone proves materialisation and owns the arguments digest. Compaction may
+     * project both, but it must not manufacture a link the stream does not declare.
+     */
+    public function testCoveredOperationalFactsRemainReadableAfterCompactionWithoutRunningAgain(): void
+    {
+        $events = new InMemoryEventStore();
+        $store = new SessionStore($events);
+        $store->start('s1', 'implement a greeter');
+        $store->recordToolCall(
+            's1',
+            'implement',
+            ['plugin' => 'Demo', 'class' => 'GreeterService', 'content' => '<?php final class GreeterService {}'],
+            (string) json_encode([
+                'ok' => true,
+                'file' => 'src/Plugins/Demo/Services/GreeterService.php',
+                'class' => 'App\\Plugins\\Demo\\Services\\GreeterService',
+                'verified' => 'syntax, strict_types, class and namespace',
+            ]),
+            true,
+            true,
+            awaitingConfirmation: false,
+        );
+        $callSeq = $events->nextSeq() - 1;
+        $store->recordExecution('s1', 'artifact.implement', null, 'agent', null, 'sha256:greeter-call');
+        $executionSeq = $events->nextSeq() - 1;
+        $store->recordEvidence(
+            's1',
+            Evidence::artifact('e-greeter', 'src/Plugins/Demo/Services/GreeterService.php'),
+        );
+        $store->ask('s1', new PendingQuestion(
+            'q-greeter',
+            'Keep the public class name?',
+            ['yes', 'no'],
+            '{"operation":"implement","arguments":{"class":"GreeterService"}}',
+            reason: 'design',
+        ));
+        $store->answer('s1', 'q-greeter', 'yes');
+        for ($i = 1; $i <= 5; ++$i) {
+            $store->recordTurn('s1', $i % 2 === 0 ? 'assistant' : 'user', "filler {$i}");
+        }
+        $store->recordExecution('s1', 'cache.refresh', null, 'agent', null, 'sha256:recent-call');
+        $store->recordEvidence('s1', Evidence::operationOk('e-recent', 'cache.refresh sha256:recent-call'));
+        $store->recordTurn('s1', 'assistant', 'filler 6');
+
+        $before = iterator_to_array($events->replay(SessionStore::PREFIX . 's1'));
+        $compactor = new Compactor(maxTurns: 3, keepRecent: 1);
+        self::assertNotNull($compactor->compactIfNeeded(
+            $store,
+            $store->load('s1') ?? self::fail('session did not load'),
+        ));
+
+        $after = $store->load('s1') ?? self::fail('compacted session did not load');
+        self::assertGreaterThanOrEqual($callSeq, $after->compactedThrough, 'the call is behind the real cut');
+        self::assertGreaterThanOrEqual($executionSeq, $after->compactedThrough, 'the execution is behind the real cut');
+
+        $summary = $after->summary ?? self::fail('compaction did not leave a summary');
+        $marker = 'Operational facts (JSON; calls do not prove execution): ';
+        $markerAt = strpos($summary, $marker);
+        self::assertNotFalse($markerAt, 'the model-facing summary must carry a structured fact block');
+        $snapshot = json_decode(
+            substr($summary, $markerAt + strlen($marker)),
+            true,
+            flags: \JSON_THROW_ON_ERROR,
+        );
+        self::assertIsArray($snapshot);
+
+        self::assertSame('implement', $snapshot['calls'][0]['operation']);
+        self::assertContains(
+            'src/Plugins/Demo/Services/GreeterService.php',
+            array_column($snapshot['calls'][0]['artifacts'], 'value'),
+        );
+        self::assertTrue($snapshot['calls'][0]['verification']['verified']);
+        self::assertSame('syntax, strict_types, class and namespace', $snapshot['calls'][0]['verification']['detail']);
+        self::assertTrue($snapshot['calls'][0]['resultSummary']['ok']);
+        self::assertTrue($snapshot['calls'][0]['stillCurrent']);
+        self::assertSame('latest_recorded_call', $snapshot['calls'][0]['currentScope']);
+        self::assertArrayNotHasKey('argumentsDigest', $snapshot['calls'][0], 'a call does not borrow an execution receipt');
+        self::assertSame('artifact.implement', $snapshot['executions'][0]['operation']);
+        self::assertSame('sha256:greeter-call', $snapshot['executions'][0]['argumentsDigest']);
+        self::assertArrayNotHasKey('resultSummary', $snapshot['executions'][0], 'an execution does not borrow a call result');
+        self::assertNull(
+            $snapshot['executions'][0]['stillCurrent'],
+            'the stream proves execution but declares no effect supersession contract',
+        );
+        self::assertTrue($snapshot['executions'][0]['coveredByCompaction']);
+        self::assertSame('cache.refresh', $snapshot['executions'][1]['operation']);
+        self::assertFalse(
+            $snapshot['executions'][1]['coveredByCompaction'],
+            'a non-turn fact after the turn cut has no other route into the model window',
+        );
+        self::assertSame('e-greeter', $snapshot['evidence'][0]['id']);
+        self::assertSame('e-recent', $snapshot['evidence'][1]['id']);
+        self::assertFalse($snapshot['evidence'][1]['coveredByCompaction']);
+        self::assertSame('q-greeter', $snapshot['decisions'][0]['id']);
+        self::assertSame('design', $snapshot['decisions'][0]['reason']);
+        self::assertTrue($snapshot['decisions'][0]['coveredByCompaction']);
+
+        self::assertSame(
+            $snapshot,
+            $store->facts('s1')->operationalFacts($after->compactedThrough),
+            'the summary and narrow recovery query must read through the same projection',
+        );
+
+        $afterEvents = iterator_to_array($events->replay(SessionStore::PREFIX . 's1'));
+        self::assertCount(count($before) + 1, $afterEvents, 'compaction appends only its own event');
+        self::assertSame(SessionEvent::Compacted->value, $afterEvents[array_key_last($afterEvents)]->type);
+        foreach ([SessionEvent::ToolCalled, SessionEvent::OperationExecuted, SessionEvent::EvidenceRecorded] as $type) {
+            self::assertSame(
+                count(array_filter($before, static fn ($event): bool => $event->type === $type->value)),
+                count(array_filter($afterEvents, static fn ($event): bool => $event->type === $type->value)),
+                sprintf('%s must not be re-run or re-recorded by compaction', $type->value),
+            );
+        }
     }
 }
