@@ -421,6 +421,20 @@ final readonly class SessionProjector
         }
         unset($carta);
 
+        // The todo card surfaces the DERIVED work state of the artifact it names, so «done but
+        // unverified» and «attempted but not materialized» are visible states, not prose. Derived
+        // through SessionFacts — the one projection every artifact query reads — never by a second
+        // matching authority here; `null` is the honest answer for a card naming nothing touched.
+        if ($todoCards !== []) {
+            $facts = SessionFacts::fromEvents($sesion, $events);
+            foreach ($todoCards as &$tarjeta) {
+                $estado = $facts->workStateForTodo((string) $tarjeta['card']['id']);
+                $tarjeta['card']['workState'] = $estado['state'] ?? null;
+                $tarjeta['card']['workStateArtifact'] = $estado['artifact'] ?? null;
+            }
+            unset($tarjeta);
+        }
+
         return array_values(array_merge($turnCards, $todoCards));
     }
 }

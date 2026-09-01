@@ -52,6 +52,20 @@ final readonly class SessionFacts
     private const MAX_DETAIL_CHARS = 2_000;
 
     /**
+     * Lifecycle ranks from least to most proven. `superseded` sits below `verified` on purpose: it
+     * WAS verified and then touched again, so presenting it as still-verified would be the stale
+     * declaration this projection exists to prevent. The weakest rank wins when one todo names
+     * several artifacts — a card is only as done as its least-proven artifact.
+     */
+    private const WORK_STATE_RANK = [
+        'planned' => 0,
+        'attempted' => 1,
+        'materialized' => 2,
+        'superseded' => 3,
+        'verified' => 4,
+    ];
+
+    /**
      * @param list<Event> $events the session's events in stream order
      */
     private function __construct(
@@ -64,6 +78,20 @@ final readonly class SessionFacts
     public static function of(EventStoreInterface $events, string $session): self
     {
         return new self($session, $events->replay(SessionStore::PREFIX . $session));
+    }
+
+    /**
+     * Build the query projection over an already-replayed stream.
+     *
+     * The door for a fold that is handed the events instead of the store — like
+     * {@see SessionProjector::boardCards()} — so every reader derives from ONE projection instead
+     * of growing a second translation of the same stream.
+     *
+     * @param list<Event> $events the session's events in stream order
+     */
+    public static function fromEvents(string $session, array $events): self
+    {
+        return new self($session, $events);
     }
 
     /**
@@ -110,6 +138,10 @@ final readonly class SessionFacts
             'executions' => $executions,
             'decisions' => $this->decisionsThrough($throughSeq),
             'evidence' => $evidence,
+            // The lifecycle survives the cut with the facts it is derived from: without this line,
+            // «attempted but not materialized» would be a distinction the model has to carry in its
+            // own reasoning — which a measured run showed it pays tokens for, and loses.
+            'workState' => $this->artifactWorkStates(),
         ];
     }
 
@@ -253,6 +285,349 @@ final readonly class SessionFacts
         ];
     }
 
+    /**
+     * The derived work state of every artifact this session touched, in first-touch order.
+     *
+     * Each artifact carries the lifecycle the stream can PROVE: `planned` (a todo names it),
+     * `attempted` (a call targeted it), `materialized` (a mutating call's own `ok:true` result — a
+     * call that only asked for confirmation does not count), `verified` (the latest
+     * producer-declared verification verdict is positive), and `superseded` (a mutating call
+     * touched the artifact after that verification, so the verdict can no longer be presented as
+     * current). Attempted-not-materialized and done-but-unverified are therefore states, not
+     * distinctions the model must carry in its own reasoning.
+     *
+     * The derivation reads only the call channel and the todos. Execution receipts prove that
+     * SOMETHING materialised but name no artifact, and joining them here would manufacture a
+     * relationship the stream does not declare — they remain their own list in
+     * {@see operationalFacts()}, exactly as separate as they are recorded.
+     *
+     * @return array<string, mixed>
+     */
+    public function workState(): array
+    {
+        return [
+            'ok' => true,
+            'session' => $this->session,
+            'artifacts' => $this->artifactWorkStates(),
+        ];
+    }
+
+    /**
+     * The derived work state of ONE named artifact, or `ok:false` when nothing touched or planned it.
+     *
+     * Unlike {@see workState()}, which can only enumerate identities the calls declared, this
+     * query can answer `planned` for an artifact no call touched yet: the caller names it, and a
+     * todo whose text names it too is the stream's proof that it is on the plan.
+     *
+     * @return array<string, mixed>
+     */
+    public function workStateFor(string $artifact): array
+    {
+        $artifact = trim($artifact);
+        if ($artifact === '') {
+            return $this->notFound('name the artifact whose work state should be derived');
+        }
+
+        $calls = [];
+        foreach ($this->events as $event) {
+            if ($event->type === SessionEvent::ToolCalled->value && $this->matchesArtifact($event, $artifact)) {
+                $calls[] = $event;
+            }
+        }
+
+        $identities = [['kind' => 'name', 'value' => $artifact]];
+        foreach ($calls as $call) {
+            foreach ($this->artifactIdentities($call) as $identity) {
+                if (! \in_array($identity, $identities, true)) {
+                    $identities[] = $identity;
+                }
+            }
+        }
+
+        $entry = $this->workStateEntry($identities, $calls);
+        if ($calls === [] && $entry['todos'] === []) {
+            return $this->notFound(sprintf('nothing touched or planned artifact "%s"', $artifact));
+        }
+
+        return [
+            'ok' => true,
+            'session' => $this->session,
+            'artifact' => $artifact,
+            'workState' => $entry,
+        ];
+    }
+
+    /**
+     * The weakest derived work state among the artifacts a todo's text names, or `null` when the
+     * todo names nothing this session touched.
+     *
+     * The WEAKEST on purpose — fail closed: a card is only as done as its least-proven artifact,
+     * so a `done` over one verified and one merely attempted artifact reads `attempted`.
+     *
+     * @return array{state: string, artifact: string}|null
+     */
+    public function workStateForTodo(string $todoId): ?array
+    {
+        $weakest = null;
+        foreach ($this->artifactWorkStates() as $entry) {
+            if (! \in_array($todoId, $entry['todos'], true)) {
+                continue;
+            }
+            $rank = self::WORK_STATE_RANK[$entry['state']] ?? 0;
+            if ($weakest === null || $rank < $weakest['rank']) {
+                $weakest = ['rank' => $rank, 'state' => $entry['state'], 'artifact' => $entry['artifact']['value']];
+            }
+        }
+
+        return $weakest === null ? null : ['state' => $weakest['state'], 'artifact' => $weakest['artifact']];
+    }
+
+    /**
+     * One lifecycle entry per artifact the calls touched, grouped by the same identity rules every
+     * named query already uses — never by a second matching authority.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function artifactWorkStates(): array
+    {
+        /** @var list<array{identities: list<array{kind: string, value: string}>, calls: list<Event>}> $groups */
+        $groups = [];
+        foreach ($this->events as $event) {
+            if ($event->type !== SessionEvent::ToolCalled->value) {
+                continue;
+            }
+            $identities = array_values(array_unique($this->artifactIdentities($event), \SORT_REGULAR));
+            if ($identities === []) {
+                continue;
+            }
+
+            $home = null;
+            foreach ($groups as $i => $group) {
+                if ($this->identitiesOverlap($group['identities'], $identities)) {
+                    $home = $i;
+
+                    break;
+                }
+            }
+            if ($home === null) {
+                $groups[] = ['identities' => $identities, 'calls' => [$event]];
+
+                continue;
+            }
+            foreach ($identities as $identity) {
+                if (! \in_array($identity, $groups[$home]['identities'], true)) {
+                    $groups[$home]['identities'][] = $identity;
+                }
+            }
+            $groups[$home]['calls'][] = $event;
+        }
+
+        $entries = [];
+        foreach ($groups as $group) {
+            $entries[] = $this->workStateEntry($group['identities'], $group['calls']);
+        }
+
+        return $entries;
+    }
+
+    /**
+     * Derive one artifact's lifecycle entry from the calls that targeted it and the todos naming it.
+     *
+     * @param list<array{kind: string, value: string}> $identities
+     * @param list<Event>                              $calls
+     *
+     * @return array<string, mixed>
+     */
+    private function workStateEntry(array $identities, array $calls): array
+    {
+        $attempts = [];
+        $materialization = null;
+        $verification = null;
+        foreach ($calls as $call) {
+            $payload = $call->payload;
+            $operation = \is_string($payload['tool'] ?? null) ? $payload['tool'] : '?';
+            $decoded = $this->decodeResult($payload['result'] ?? '');
+            $succeeded = $this->callSucceeded($payload, $decoded);
+            $mutating = ($payload['mutating'] ?? false) === true;
+            // A call that only ASKED did not do: counting it as materialisation would repeat the
+            // very double-count `awaitingConfirmation` was recorded to prevent.
+            $onlyAsked = ($payload['awaitingConfirmation'] ?? null) === true;
+            $attempts[] = [
+                'seq' => $call->seq,
+                'operation' => $operation,
+                'succeeded' => $succeeded,
+                'mutating' => $mutating,
+                'awaitingConfirmation' => \is_bool($payload['awaitingConfirmation'] ?? null)
+                    ? $payload['awaitingConfirmation']
+                    : null,
+            ];
+            if ($mutating && $succeeded && ! $onlyAsked) {
+                $materialization = ['seq' => $call->seq, 'operation' => $operation];
+            }
+            $declaration = $this->verificationDeclaration($call, $decoded);
+            if ($declaration !== null) {
+                $verification = ['seq' => $call->seq, 'operation' => $operation, 'verified' => $declaration['verified']];
+            }
+        }
+
+        // A mutating call AFTER the verification supersedes it — even a failed one, because a
+        // failed mutation is not proof nothing changed (the measured wound: `make` created the
+        // file AND returned ok:false). The stream cannot prove the verdict survived the touch,
+        // so the projection fails closed instead of presenting a stale verdict as current.
+        $supersededBy = null;
+        if ($verification !== null && $verification['verified'] === true) {
+            foreach ($calls as $call) {
+                $payload = $call->payload;
+                if ($call->seq <= $verification['seq']
+                    || ($payload['mutating'] ?? false) !== true
+                    || ($payload['awaitingConfirmation'] ?? null) === true
+                ) {
+                    continue;
+                }
+                $supersededBy = [
+                    'seq' => $call->seq,
+                    'operation' => \is_string($payload['tool'] ?? null) ? $payload['tool'] : '?',
+                ];
+            }
+        }
+
+        $planned = null;
+        $todos = [];
+        foreach ($this->events as $event) {
+            if ($event->type !== SessionEvent::TodoChanged->value) {
+                continue;
+            }
+            $todoId = \is_string($event->payload['id'] ?? null) ? $event->payload['id'] : '';
+            $text = \is_string($event->payload['text'] ?? null) ? $event->payload['text'] : '';
+            if ($todoId === '' || ! $this->textNamesAny($text, $identities)) {
+                continue;
+            }
+            if ($planned === null) {
+                $planned = ['todo' => $todoId, 'seq' => $event->seq];
+            }
+            if (! \in_array($todoId, $todos, true)) {
+                $todos[] = $todoId;
+            }
+        }
+
+        if ($supersededBy !== null) {
+            $state = 'superseded';
+        } elseif ($verification !== null && $verification['verified'] === true) {
+            $state = 'verified';
+        } elseif ($materialization !== null) {
+            $state = 'materialized';
+        } elseif ($attempts !== []) {
+            $state = 'attempted';
+        } else {
+            $state = 'planned';
+        }
+
+        return [
+            'artifact' => $identities[0],
+            'identities' => $identities,
+            'state' => $state,
+            'planned' => $planned,
+            'todos' => $todos,
+            'attempts' => $attempts,
+            'materialization' => $materialization,
+            'verification' => $verification,
+            'supersededBy' => $supersededBy,
+        ];
+    }
+
+    /**
+     * Whether two identity sets speak about the same artifact, by the rules a named query uses.
+     *
+     * @param list<array{kind: string, value: string}> $a
+     * @param list<array{kind: string, value: string}> $b
+     */
+    private function identitiesOverlap(array $a, array $b): bool
+    {
+        foreach ($a as $mine) {
+            foreach ($b as $theirs) {
+                if ($this->valuesNameSameArtifact($mine['value'], $theirs['value'])) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Whether a todo's free text names any of an artifact's identities.
+     *
+     * Containment for a qualified spelling, whole-word match for the bare leaf: prose mentions a
+     * class the way people write it, and a leaf glued inside a longer identifier is not a mention.
+     *
+     * @param list<array{kind: string, value: string}> $identities
+     */
+    private function textNamesAny(string $text, array $identities): bool
+    {
+        if (trim($text) === '') {
+            return false;
+        }
+        foreach ($identities as $identity) {
+            $value = $identity['value'];
+            if ($value !== '' && str_contains($text, $value)) {
+                return true;
+            }
+            $leaf = $this->artifactLeaf($value);
+            if ($leaf !== ''
+                && preg_match('/(?<![A-Za-z0-9_])' . preg_quote($leaf, '/') . '(?![A-Za-z0-9_])/u', $text) === 1
+            ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * How to recover a truncated fact's full value: re-invoke the RECORDED operation with the same
+     * arguments — identified here by name and canonical digest. `sameCallRecorded` says the stream
+     * holds exactly this call; whether re-invoking is safe is the CALLER's decision, which is why
+     * the hint names the operation instead of promising it is read-only. What it rules out is the
+     * measured spiral: concluding the data is permanently lost because only the cut cache is visible.
+     *
+     * @param array<string, mixed> $payload
+     *
+     * @return array{operation: string, argumentsDigest: string, sameCallRecorded: bool}
+     */
+    private function refetchRecovery(array $payload): array
+    {
+        return [
+            'operation' => \is_string($payload['tool'] ?? null) ? $payload['tool'] : '?',
+            'argumentsDigest' => 'sha256:' . hash('sha256', $this->canonicalJson($payload['arguments'] ?? null)),
+            'sameCallRecorded' => true,
+        ];
+    }
+
+    /** The canonical JSON of a value — object keys sorted recursively — so equal arguments digest equal. */
+    private function canonicalJson(mixed $value): string
+    {
+        $encoded = json_encode($this->sortedKeys($value), \JSON_UNESCAPED_UNICODE | \JSON_UNESCAPED_SLASHES);
+
+        return \is_string($encoded) ? $encoded : '';
+    }
+
+    /** The same value with every associative level sorted by key; lists keep their order. */
+    private function sortedKeys(mixed $value): mixed
+    {
+        if (! \is_array($value)) {
+            return $value;
+        }
+        $sorted = [];
+        foreach ($value as $key => $item) {
+            $sorted[$key] = $this->sortedKeys($item);
+        }
+        if (! array_is_list($sorted)) {
+            ksort($sorted);
+        }
+
+        return $sorted;
+    }
+
     /** @return array<string, mixed> */
     private function operationalCall(Event $event, int $asOfSeq, bool $coveredByCompaction): array
     {
@@ -276,7 +651,7 @@ final readonly class SessionFacts
             ];
         }
 
-        return [
+        $call = [
             'seq' => $event->seq,
             'operation' => \is_string($payload['tool'] ?? null) ? $payload['tool'] : '?',
             'target' => $this->targetArguments($payload['arguments'] ?? null),
@@ -298,6 +673,14 @@ final readonly class SessionFacts
             'coveredByCompaction' => $coveredByCompaction,
             'source' => ['event' => SessionEvent::ToolCalled->value, 'seq' => $event->seq],
         ];
+        // A truncated fact must say how to recover the full value. An agent that saw only the cut
+        // cache after compaction CONCLUDED the data was permanently lost and spiralled — the cap
+        // stays (it is what bounds the window); the recovery rides with it.
+        if ($result['truncated'] === true) {
+            $call['refetch'] = $this->refetchRecovery($payload);
+        }
+
+        return $call;
     }
 
     /** @return array<string, mixed> */
@@ -419,6 +802,11 @@ final readonly class SessionFacts
                 'resultTruncated' => $result['truncated'],
             ],
         ];
+        // The same truncation honesty the compaction block carries: a bounded answer names the
+        // re-invocation that returns the full, current value instead of reading as a dead end.
+        if ($result['truncated'] === true) {
+            $answer['call']['refetch'] = $this->refetchRecovery($payload);
+        }
         if ($artifact !== null) {
             $answer['artifact'] = $artifact;
         }
@@ -482,23 +870,23 @@ final readonly class SessionFacts
     private function matchesArtifact(Event $event, string $artifact): bool
     {
         foreach ($this->artifactIdentities($event) as $identity) {
-            $candidate = $identity['value'];
-            if ($this->isQualified($artifact)) {
-                if ($this->isQualified($candidate) && $this->sameQualifiedArtifact($candidate, $artifact)) {
-                    return true;
-                }
-
-                continue;
-            }
-
-            if ($this->normaliseArtifact($candidate) === $this->normaliseArtifact($artifact)
-                || $this->artifactLeaf($candidate) === $this->artifactLeaf($artifact)
-            ) {
+            if ($this->valuesNameSameArtifact($identity['value'], $artifact)) {
                 return true;
             }
         }
 
         return false;
+    }
+
+    /** Whether one identity value and one queried spelling name the same artifact. */
+    private function valuesNameSameArtifact(string $candidate, string $artifact): bool
+    {
+        if ($this->isQualified($artifact)) {
+            return $this->isQualified($candidate) && $this->sameQualifiedArtifact($candidate, $artifact);
+        }
+
+        return $this->normaliseArtifact($candidate) === $this->normaliseArtifact($artifact)
+            || $this->artifactLeaf($candidate) === $this->artifactLeaf($artifact);
     }
 
     /**
