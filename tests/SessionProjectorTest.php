@@ -15,6 +15,7 @@ declare(strict_types=1);
 namespace Milpa\Agent\Tests;
 
 use Milpa\Agent\AutonomyMode;
+use Milpa\Agent\Evidence;
 use Milpa\Agent\SessionProjector;
 use Milpa\Agent\SessionStore;
 use Milpa\Agent\Todo;
@@ -43,7 +44,7 @@ final class SessionProjectorTest extends TestCase
         $almacen = new SessionStore($eventos);
         $almacen->start('s1', 'x');
         $almacen->setTodo('s1', new Todo('t1', 'mirar', TodoStatus::Pending));
-        $almacen->setTodo('s1', new Todo('t1', 'mirar', TodoStatus::Done));
+        $almacen->completeTodo('s1', 't1', Evidence::testPassed('e1', 'vendor/bin/phpunit'));
 
         $pintables = (new SessionProjector())->projectAll($eventos->replay('agent-session:s1'));
         $tarjetas = array_values(array_filter($pintables, static fn (array $x): bool => $x['kind'] === 'card'));
@@ -137,7 +138,8 @@ final class SessionProjectorTest extends TestCase
         $almacen->start('s1', 'x');
         $almacen->recordTurn('s1', 'assistant', 'voy');
         $almacen->recordToolCall('s1', 'make', [], 'ok');
-        $almacen->setTodo('s1', new Todo('t1', 'ship it', TodoStatus::Done));
+        $almacen->setTodo('s1', new Todo('t1', 'ship it', TodoStatus::InProgress));
+        $almacen->completeTodo('s1', 't1', Evidence::operationOk('e1', 'make'));
 
         $cards = (new SessionProjector())->boardCards($eventos->replay('agent-session:s1'));
         $origenes = array_map(static fn (array $c): ?string => $c['card']['origin'] ?? null, $cards);

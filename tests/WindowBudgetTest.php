@@ -19,6 +19,7 @@ use Milpa\Agent\FactualSummarizer;
 use Milpa\Agent\PendingQuestion;
 use Milpa\Agent\Session;
 use Milpa\Agent\SessionStore;
+use Milpa\Agent\Tests\Support\LegacyTodoWriter;
 use Milpa\Agent\Todo;
 use Milpa\Agent\TodoStatus;
 use Milpa\Agent\WindowBudget;
@@ -42,15 +43,22 @@ final class WindowBudgetTest extends TestCase
     /** A session deep enough that an unbudgeted composition provably overflows the target. */
     private function deepStore(): SessionStore
     {
-        $store = new SessionStore(new InMemoryEventStore());
+        $events = new InMemoryEventStore();
+        $store = new SessionStore($events);
         $store->start('deep', 'build the tasks application end to end');
         $store->setPlan('deep', '1. entities  2. services  3. controllers  4. tests  5. preview');
         for ($i = 1; $i <= 18; ++$i) {
-            $store->setTodo('deep', new Todo(
+            $todo = new Todo(
                 "t{$i}",
                 "step {$i} of the build, with enough words to weigh something",
                 $i <= 12 ? TodoStatus::Done : TodoStatus::Pending,
-            ));
+            );
+            if ($i <= 12) {
+                // Historical bare dones, raw-appended (0183): the graduated door only writes open states.
+                LegacyTodoWriter::write($events, 'deep', $todo);
+            } else {
+                $store->setTodo('deep', $todo);
+            }
         }
         $store->grant('deep', 'make');
         $store->grant('deep', 'edit');
@@ -315,11 +323,13 @@ final class WindowBudgetTest extends TestCase
     /** Closed todos collapse to a count under the briefing budget; the open ones stay whole. */
     public function testTheBriefingCollapsesClosedTodosUnderItsBudget(): void
     {
-        $store = new SessionStore(new InMemoryEventStore());
+        $events = new InMemoryEventStore();
+        $store = new SessionStore($events);
         $store->start('s1', 'x');
         $store->setPlan('s1', 'ship the feature');
         for ($i = 1; $i <= 40; ++$i) {
-            $store->setTodo('s1', new Todo("d{$i}", "already done piece {$i}", TodoStatus::Done));
+            // Historical bare dones, raw-appended (0183): the graduated door no longer writes them.
+            LegacyTodoWriter::write($events, 's1', new Todo("d{$i}", "already done piece {$i}", TodoStatus::Done));
         }
         $store->setTodo('s1', new Todo('o1', 'the very next open step'));
         $store->setTodo('s1', new Todo('o2', 'the second open step', TodoStatus::InProgress));

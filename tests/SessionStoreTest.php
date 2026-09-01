@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace Milpa\Agent\Tests;
 
 use Milpa\Agent\AutonomyMode;
+use Milpa\Agent\Evidence;
 use Milpa\Agent\PausedSequence;
 use Milpa\Agent\PendingQuestion;
 use Milpa\Agent\Principal;
 use Milpa\Agent\SessionStore;
+use Milpa\Agent\Tests\Support\LegacyTodoWriter;
 use Milpa\Agent\Todo;
 use Milpa\Agent\TodoOrigin;
 use Milpa\Agent\TodoStatus;
@@ -137,7 +139,7 @@ final class SessionStoreTest extends TestCase
         $almacen->setPlan('s1', '1. entidad  2. controller  3. rutas');
         $almacen->setTodo('s1', new Todo('t1', 'escribir la entidad'));
         $almacen->setTodo('s1', new Todo('t2', 'escribir el controller'));
-        $almacen->setTodo('s1', new Todo('t1', 'escribir la entidad', TodoStatus::Done));
+        $almacen->completeTodo('s1', 't1', Evidence::artifact('e1', 'src/Entity.php'));
 
         $sesion = $almacen->load('s1');
 
@@ -314,7 +316,8 @@ final class SessionStoreTest extends TestCase
         $almacen = $this->store();
         $almacen->start('s1', 'x');
         $almacen->setPlan('s1', '1. entidad  2. controller');
-        $almacen->setTodo('s1', new Todo('t1', 'la entidad', TodoStatus::Done));
+        $almacen->setTodo('s1', new Todo('t1', 'la entidad', TodoStatus::Pending));
+        $almacen->completeTodo('s1', 't1', Evidence::artifact('e1', 'src/Entity.php'));
         $almacen->setTodo('s1', new Todo('t2', 'el controller'));
         $almacen->recordTurn('s1', 'user', 'sigue');
 
@@ -337,7 +340,8 @@ final class SessionStoreTest extends TestCase
     {
         $almacen = $this->store();
         $almacen->start('s1', 'x');
-        $almacen->setTodo('s1', new Todo('t1', 'ya escrita', TodoStatus::Done));
+        $almacen->setTodo('s1', new Todo('t1', 'ya escrita', TodoStatus::Pending));
+        $almacen->completeTodo('s1', 't1', Evidence::testPassed('e1', 'vendor/bin/phpunit'));
 
         self::assertStringContainsString('[x] t1: ya escrita', (string) $almacen->load('s1')?->stateBriefing());
     }
@@ -597,7 +601,7 @@ final class SessionStoreTest extends TestCase
 
         $almacen->setTodo('s1', new Todo('t1', 'mirar', TodoStatus::Pending));
         $almacen->setTodo('s1', new Todo('t1', 'mirar', TodoStatus::InProgress));
-        $almacen->setTodo('s1', new Todo('t1', 'mirar', TodoStatus::Done));
+        $almacen->completeTodo('s1', 't1', Evidence::testPassed('e1', 'vendor/bin/phpunit'));
 
         $cambios = array_values(array_filter(
             $eventos->replay('agent-session:s1'),
@@ -623,6 +627,10 @@ final class SessionStoreTest extends TestCase
      * `from: pending` para que el tablero pudiera animar el movimiento. Sería inventar una columna
      * que la tarjeta nunca ocupó: el mejor riel no fuerza a que todo se mueva, fuerza a que cada
      * tarjeta declare honestamente cómo nació.
+     *
+     * Since the graduation (greenhouse decisions/0183) a born-done only exists as HISTORY — the
+     * door refuses to write one — so this simulates the old stream raw-appended and pins how such
+     * history reads back.
      */
     public function testATodoBornDoneDoesNotClaimToComeFromPending(): void
     {
@@ -630,7 +638,7 @@ final class SessionStoreTest extends TestCase
         $almacen = new SessionStore($eventos);
         $almacen->start('s1', 'x');
 
-        $almacen->setTodo('s1', new Todo('t1', 'ya lo hice', TodoStatus::Done));
+        LegacyTodoWriter::write($eventos, 's1', new Todo('t1', 'ya lo hice', TodoStatus::Done));
 
         $cambio = array_values(array_filter(
             $eventos->replay('agent-session:s1'),
@@ -672,10 +680,12 @@ final class SessionStoreTest extends TestCase
      */
     public function testHowATodoWasBornIsDerivedFromTheStreamAndNotAsked(): void
     {
-        $sinTrabajo = $this->store();
+        $eventosSinTrabajo = new InMemoryEventStore();
+        $sinTrabajo = new SessionStore($eventosSinTrabajo);
         $sinTrabajo->start('s1', 'x');
         $sinTrabajo->setTodo('s1', new Todo('t1', 'voy a hacerlo', TodoStatus::Pending));
-        $sinTrabajo->setTodo('s1', new Todo('t2', 'ya lo hice', TodoStatus::Done));
+        // A born-done is history now (0183): raw-appended as the old stream would carry it.
+        LegacyTodoWriter::write($eventosSinTrabajo, 's1', new Todo('t2', 'ya lo hice', TodoStatus::Done));
 
         $porId = [];
         foreach ($sinTrabajo->load('s1')?->todos ?? [] as $t) {
@@ -689,11 +699,12 @@ final class SessionStoreTest extends TestCase
             'nace hecha sin que nada la respalde — Q-P19-C midió cero de éstas, y por eso se nombra ahora',
         );
 
-        $conTrabajo = $this->store();
+        $eventosConTrabajo = new InMemoryEventStore();
+        $conTrabajo = new SessionStore($eventosConTrabajo);
         $conTrabajo->start('s2', 'x');
         $conTrabajo->recordToolCall('s2', 'plugins_architecture', [], 'ok');
         $conTrabajo->setTodo('s2', new Todo('t3', 'apareció al mirar', TodoStatus::Pending));
-        $conTrabajo->setTodo('s2', new Todo('t4', 'lo hice', TodoStatus::Done));
+        LegacyTodoWriter::write($eventosConTrabajo, 's2', new Todo('t4', 'lo hice', TodoStatus::Done));
 
         $porId2 = [];
         foreach ($conTrabajo->load('s2')?->todos ?? [] as $t) {
@@ -717,7 +728,7 @@ final class SessionStoreTest extends TestCase
         $almacen->start('s1', 'x');
         $almacen->setTodo('s1', new Todo('t1', 'mirar', TodoStatus::Pending));
         $almacen->setTodo('s1', new Todo('t1', 'mirar', TodoStatus::InProgress));
-        $almacen->setTodo('s1', new Todo('t1', 'mirar', TodoStatus::Done));
+        $almacen->completeTodo('s1', 't1', Evidence::testPassed('e1', 'vendor/bin/phpunit'));
 
         $tarjeta = ($almacen->load('s1')?->todos ?? [])[0] ?? null;
 
@@ -742,7 +753,8 @@ final class SessionStoreTest extends TestCase
         $eventos = new InMemoryEventStore();
         $almacen = new SessionStore($eventos);
         $almacen->start('s1', 'x');
-        $almacen->setTodo('s1', new Todo('t1', 'terminada', TodoStatus::Done));
+        $almacen->setTodo('s1', new Todo('t1', 'terminada', TodoStatus::Pending));
+        $almacen->completeTodo('s1', 't1', Evidence::testPassed('e1', 'vendor/bin/phpunit'));
         $almacen->setTodo('s1', new Todo('t2', 'a medias', TodoStatus::InProgress));
         $almacen->setTodo('s1', new Todo('t3', 'trabada', TodoStatus::Blocked));
 
@@ -768,7 +780,8 @@ final class SessionStoreTest extends TestCase
         $eventos = new InMemoryEventStore();
         $almacen = new SessionStore($eventos);
         $almacen->start('s1', 'x');
-        $almacen->setTodo('s1', new Todo('t1', 'lista', TodoStatus::Done));
+        $almacen->setTodo('s1', new Todo('t1', 'lista', TodoStatus::Pending));
+        $almacen->completeTodo('s1', 't1', Evidence::testPassed('e1', 'vendor/bin/phpunit'));
         $almacen->end('s1', 'listo');
 
         $declarado = array_filter(
@@ -822,7 +835,8 @@ final class SessionStoreTest extends TestCase
     {
         $almacen = $this->store();
         $almacen->start('vieja', 'x');
-        $almacen->setTodo('vieja', new Todo('t1', 'lista', TodoStatus::Done));
+        $almacen->setTodo('vieja', new Todo('t1', 'lista', TodoStatus::Pending));
+        $almacen->completeTodo('vieja', 't1', Evidence::testPassed('e1', 'vendor/bin/phpunit'));
         $almacen->start('nueva', 'y');
 
         self::assertSame(0, $almacen->transferOpenTodos('vieja', 'nueva'));

@@ -8,6 +8,7 @@ use Milpa\Agent\Evidence;
 use Milpa\Agent\EvidenceKind;
 use Milpa\Agent\SessionProjector;
 use Milpa\Agent\SessionStore;
+use Milpa\Agent\Tests\Support\LegacyTodoWriter;
 use Milpa\Agent\Todo;
 use Milpa\Agent\TodoStatus;
 use Milpa\EventStore\InMemoryEventStore;
@@ -55,26 +56,55 @@ final class EvidenceLedgerTest extends TestCase
     }
 
     /**
-     * A `done` reached the RAW way, with nothing behind it, is not rejected — it is recorded and
-     * FLAGGED. The system records what happened; it names the unevidenced done rather than hiding or
-     * censoring it, exactly as it names an unsupported birth.
+     * THE GRADUATION (greenhouse decisions/0183): the transition to `done` without evidence CEASES
+     * TO EXIST. What record-and-flag tolerated — a bare `setTodo(Done)` landing stamped
+     * `evidenced: false` — is now refused at the door, and NOTHING moves. This test held the old
+     * compat; it flips to hold the new law, exactly as the ruling licenses.
      */
-    public function testARawDoneWithNoEvidenceIsRecordedButFlaggedUnverified(): void
+    public function testARawDoneWithNoEvidenceIsRefusedAndNothingMoves(): void
     {
         $store = $this->store();
         $store->start('s1', 'ship it');
         $store->setTodo('s1', new Todo('t1', 'ship it', TodoStatus::Pending));
-        $store->setTodo('s1', new Todo('t1', 'ship it', TodoStatus::Done));
+
+        try {
+            $store->setTodo('s1', new Todo('t1', 'ship it', TodoStatus::Done));
+            self::fail('a done without evidence does not exist: setTodo must refuse the transition');
+        } catch (\LogicException $refusal) {
+            self::assertStringContainsString('completeTodo', $refusal->getMessage(), 'the refusal names the door');
+        }
 
         $session = $store->load('s1');
         self::assertNotNull($session);
-        self::assertSame(TodoStatus::Done, $session->todos[0]->status, 'nothing is censored: the done lands');
-        self::assertFalse($session->isDoneVerified('t1'), 'but the ledger cannot vouch for it');
-        self::assertSame([], $store->evidenceFor('s1', 't1'), 'and there is nothing to show as closing it');
+        self::assertSame(TodoStatus::Pending, $session->todos[0]->status, 'the card did not move');
+        self::assertSame([], $session->unverifiedDones(), 'and no unverified done was minted');
+    }
 
-        $unverified = $session->unverifiedDones();
-        self::assertCount(1, $unverified, 'it is named, so a verifier can count it');
-        self::assertSame('t1', $unverified[0]->id);
+    /** Creating a card ALREADY done is the same refused transition: born-done was a birth, not work. */
+    public function testCreatingATodoAsDoneIsRefused(): void
+    {
+        $store = $this->store();
+        $store->start('s1', 'ship it');
+
+        try {
+            $store->setTodo('s1', new Todo('t1', 'ship it', TodoStatus::Done));
+            self::fail('a card cannot be born done through setTodo');
+        } catch (\LogicException) {
+            // expected: the transition does not exist
+        }
+
+        self::assertSame([], $store->load('s1')?->todos ?? ['sentinel'], 'nothing was written');
+    }
+
+    /** A blocked card cannot jump to done through the raw door either: the law is by target, not by source. */
+    public function testMovingABlockedTodoToDoneIsRefused(): void
+    {
+        $store = $this->store();
+        $store->start('s1', 'unblock it');
+        $store->setTodo('s1', new Todo('t1', 'unblock it', TodoStatus::Blocked));
+
+        $this->expectException(\LogicException::class);
+        $store->setTodo('s1', new Todo('t1', 'unblock it', TodoStatus::Done));
     }
 
     /**
@@ -140,41 +170,56 @@ final class EvidenceLedgerTest extends TestCase
     }
 
     /**
-     * The stamp on the `done` transition is DERIVED from the ledger, not the caller's word: recording
-     * the evidence before the transition makes a plain {@see SessionStore::setTodo()} done read as
-     * verified, because the store reads the ledger it just grew.
+     * The refusal is by TRANSITION, not by ledger state: even with covering evidence already
+     * recorded, the raw {@see SessionStore::setTodo()} does not own the move to `done`. The claim
+     * travels through {@see SessionStore::completeTodo()} — one door, so the house always judges
+     * the evidence against the claim instead of trusting that somebody else already did.
      */
-    public function testTheDoneStampIsDerivedFromTheLedger(): void
+    public function testEvenWithEvidenceInTheLedgerTheRawDoorRefusesDone(): void
     {
         $store = $this->store();
         $store->start('s1', 'a goal');
         $store->setTodo('s1', new Todo('t1', 'a task', TodoStatus::Pending));
         $store->recordEvidence('s1', Evidence::operationOk('e1', 'config.set sha256:abc', 't1'));
 
-        // A raw setTodo — not completeTodo — still reads as verified, because the evidence is already
-        // in the ledger and the stamp is observed, not declared.
-        $store->setTodo('s1', new Todo('t1', 'a task', TodoStatus::Done));
+        try {
+            $store->setTodo('s1', new Todo('t1', 'a task', TodoStatus::Done));
+            self::fail('the raw door must refuse done even when the ledger could vouch for it');
+        } catch (\LogicException) {
+            // expected: completeTodo is the only path to done
+        }
 
-        $session = $store->load('s1');
-        self::assertNotNull($session);
-        self::assertTrue($session->isDoneVerified('t1'));
+        // And through the sanctioned door the same claim lands, verified.
+        $store->completeTodo('s1', 't1', Evidence::operationOk('e2', 'config.set sha256:abc'));
+        self::assertTrue($store->load('s1')?->isDoneVerified('t1'));
     }
 
     /**
-     * A STALE STREAM STILL LOADS: an old `done` written before this feature existed carries no stamp
-     * and no ledger, and it must reconstruct as an unverified done rather than break — backward
-     * compatibility is what an append-only log is for.
+     * HISTORY IS TOLERATED, NEW WRITES ARE GOVERNED: a stream carrying an old bare `done` — written
+     * before the graduation, simulated here as raw history because the door no longer produces it —
+     * still loads, still projects `evidenced: false`, and {@see Session::unverifiedDones()} still
+     * names it. The law changed the WRITE door, never the fold.
      */
-    public function testAStreamWithNoEvidenceStillProjectsAsAnUnverifiedDone(): void
+    public function testAStreamCarryingOldBareDonesStillLoadsAndNamesThem(): void
     {
-        $store = $this->store();
+        $events = new InMemoryEventStore();
+        $store = new SessionStore($events);
         $store->start('s1', 'legacy');
-        $store->setTodo('s1', new Todo('t1', 'done long ago', TodoStatus::Done));
+        LegacyTodoWriter::write($events, 's1', new Todo('t1', 'done long ago', TodoStatus::Done));
 
         $session = $store->load('s1');
         self::assertNotNull($session);
-        self::assertSame(TodoStatus::Done, $session->todos[0]->status);
+        self::assertSame(TodoStatus::Done, $session->todos[0]->status, 'the old done loads');
         self::assertFalse($session->isDoneVerified('t1'), 'no ledger means it cannot be vouched for');
+        self::assertSame(['t1'], array_map(static fn (Todo $t): string => $t->id, $session->unverifiedDones()));
+
+        $cards = (new SessionProjector())->projectAll($events->replay('agent-session:s1'));
+        $done = array_values(array_filter(
+            $cards,
+            static fn (array $c): bool => $c['kind'] === 'card' && ($c['card']['to'] ?? '') === 'done',
+        ));
+        self::assertCount(1, $done, 'the historical done still projects');
+        self::assertFalse($done[0]['card']['evidenced'], 'named unevidenced, not censored');
     }
 
     /** The projector translates an evidence event so a surface can paint what closed a card. */
