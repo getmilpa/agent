@@ -34,6 +34,16 @@ namespace Milpa\Agent;
 final readonly class FactualSummarizer implements Summarizer
 {
     /**
+     * The one label that separates prose from the machine-readable facts in a written summary.
+     *
+     * Public because it has TWO readers with one contract: {@see withOperationalFacts()} writes it,
+     * and {@see Session::classifiedWindow()} finds it again when an oversized summary written before
+     * budgets existed must be re-bounded at composition. Two spellings of this line would be two
+     * contracts (greenhouse evidence/0141).
+     */
+    public const FACTS_LABEL = 'Operational facts (JSON; calls do not prove execution): ';
+
+    /**
      * Deriva el resumen de lo apendado hasta `$throughSeq`.
      *
      * El formato es de lista y no de prosa a propósito: se lee rápido, no invita al modelo a
@@ -41,6 +51,33 @@ final readonly class FactualSummarizer implements Summarizer
      * que le falta un hecho parece completo.
      */
     public function summarize(Session $session, int $throughSeq): string
+    {
+        return $this->compose($session, $throughSeq, false);
+    }
+
+    /**
+     * The same summary WRITTEN to fit `$maxChars`, the cheapest line collapsing first.
+     *
+     * What collapses is the done-todo list — it becomes a count, which still says the work
+     * happened. What never collapses: lo pendiente (it is the model's next step) and the human's
+     * decisions (losing them makes the agent re-ask or, worse, re-assume). If collapsing is not
+     * enough the rest is clamped with the cut named, because a summary that shrank in silence
+     * reads as complete — that is what makes silent truncation dangerous.
+     */
+    public function boundedSummary(Session $session, int $throughSeq, int $maxChars): string
+    {
+        $entero = $this->compose($session, $throughSeq, false);
+        if (mb_strlen($entero) <= $maxChars) {
+            return $entero;
+        }
+
+        $colapsado = $this->compose($session, $throughSeq, true);
+
+        return WindowBudget::clamp($colapsado, $maxChars);
+    }
+
+    /** The single writer both {@see summarize()} and {@see boundedSummary()} ask. */
+    private function compose(Session $session, int $throughSeq, bool $collapseDone): string
     {
         $lineas = ["Objetivo de la sesión: {$session->goal}."];
 
@@ -71,7 +108,9 @@ final readonly class FactualSummarizer implements Summarizer
             }
         }
         if ($hechos !== []) {
-            $lineas[] = 'Ya hecho: ' . implode('; ', $hechos) . '.';
+            $lineas[] = $collapseDone
+                ? 'Ya hecho: ' . \count($hechos) . ' tareas.'
+                : 'Ya hecho: ' . implode('; ', $hechos) . '.';
         }
         if ($faltan !== []) {
             // Lo pendiente va SIEMPRE, aunque el resumen quede más largo: es lo único de este texto
@@ -108,23 +147,123 @@ final readonly class FactualSummarizer implements Summarizer
      * the session stream, applies the same narrow result/artifact/verification rules as recovery
      * queries, and this method only serialises that value into the compacted window.
      */
-    public function withOperationalFacts(string $summary, SessionFacts $facts, int $throughSeq): string
+    public function withOperationalFacts(
+        string $summary,
+        SessionFacts $facts,
+        int $throughSeq,
+        ?int $maxTokens = null,
+    ): string {
+        $value = $facts->operationalFacts($throughSeq);
+        if ($maxTokens !== null) {
+            $value = self::fitOperationalFacts($value, $maxTokens * WindowBudget::CHARS_PER_TOKEN);
+        }
+
+        return implode("\n", array_filter(
+            [
+                rtrim($summary),
+                self::FACTS_LABEL . self::encodeFacts($value),
+            ],
+            static fn (string $line): bool => $line !== '',
+        ));
+    }
+
+    /**
+     * The one serialisation of a facts value — writer and re-bounder must produce the same bytes.
+     *
+     * @param array<string, mixed> $facts
+     */
+    public static function encodeFacts(array $facts): string
     {
-        $encoded = json_encode(
-            $facts->operationalFacts($throughSeq),
+        return json_encode(
+            $facts,
             \JSON_UNESCAPED_UNICODE
                 | \JSON_UNESCAPED_SLASHES
                 | \JSON_INVALID_UTF8_SUBSTITUTE
                 | \JSON_THROW_ON_ERROR,
         );
+    }
 
-        return implode("\n", array_filter(
-            [
-                rtrim($summary),
-                'Operational facts (JSON; calls do not prove execution): ' . $encoded,
-            ],
-            static fn (string $line): bool => $line !== '',
-        ));
+    /**
+     * Fit a facts value under `$maxChars` of serialisation, oldest entries first, THE ELISION NAMED.
+     *
+     * The most recent facts stay whole because they are the ones the next step reads; what is
+     * dropped is announced in the block itself — `elided` and `note` — so the model is told there
+     * IS more and where it lives, instead of being handed a list that quietly claims to be all of
+     * it. Human decisions are never dropped: they are the most expensive thing in the whole session
+     * to lose, and they are small. The full set stays queryable through {@see SessionFacts} — this
+     * trims only the model-facing projection, never the stream and never a query's answer.
+     *
+     * @param array<string, mixed> $facts
+     *
+     * @return array<string, mixed>
+     */
+    public static function fitOperationalFacts(array $facts, int $maxChars): array
+    {
+        if (\strlen(self::encodeFacts($facts)) <= $maxChars) {
+            return $facts;
+        }
+
+        $elided = 0;
+        while (true) {
+            if (!self::dropOldestEntry($facts)) {
+                break;
+            }
+            ++$elided;
+            $facts['elided'] = $elided;
+            $facts['note'] = 'query session facts for older operations';
+            if (\strlen(self::encodeFacts($facts)) <= $maxChars) {
+                break;
+            }
+        }
+
+        return $facts;
+    }
+
+    /**
+     * Drop the single oldest droppable entry, or answer `false` when nothing droppable remains.
+     *
+     * Age is the recorded `seq` across the three stream-ordered lists; `workState` entries carry no
+     * sequence, so they go last and front-first. `decisions` is not on the list on purpose.
+     *
+     * @param array<string, mixed> $facts
+     */
+    private static function dropOldestEntry(array &$facts): bool
+    {
+        $oldestKey = null;
+        $oldestSeq = \PHP_INT_MAX;
+        foreach (['calls', 'executions', 'evidence'] as $key) {
+            $list = $facts[$key] ?? null;
+            if (!\is_array($list)) {
+                continue;
+            }
+            $head = $list[0] ?? null;
+            if (!\is_array($head)) {
+                continue;
+            }
+            $seq = \is_int($head['seq'] ?? null) ? $head['seq'] : 0;
+            if ($seq < $oldestSeq) {
+                $oldestSeq = $seq;
+                $oldestKey = $key;
+            }
+        }
+        if ($oldestKey !== null) {
+            $list = $facts[$oldestKey];
+            if (\is_array($list)) {
+                array_shift($list);
+                $facts[$oldestKey] = $list;
+            }
+
+            return true;
+        }
+        $workState = $facts['workState'] ?? null;
+        if (\is_array($workState) && $workState !== []) {
+            array_shift($workState);
+            $facts['workState'] = $workState;
+
+            return true;
+        }
+
+        return false;
     }
 
     /**
