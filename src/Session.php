@@ -234,12 +234,15 @@ final readonly class Session
      * teniendo los cuarenta. Si se reemplazaran, la evidencia de cómo se llegó a una decisión se
      * perdería justo en las sesiones donde más importa: las largas.
      *
+     * @param int|null $contextTokens the model's declared context in tokens, or `null` to compose
+     *                                exactly as before budgets existed — byte-for-byte
+     *
      * @return list<array{role: string, content: string}>
      */
-    public function window(): array
+    public function window(?int $contextTokens = null): array
     {
         $providerWindow = [];
-        foreach ($this->classifiedWindow() as $message) {
+        foreach ($this->classifiedWindow($contextTokens) as $message) {
             $providerWindow[] = ['role' => $message['role'], 'content' => $message['content']];
         }
 
@@ -253,15 +256,31 @@ final readonly class Session
      * composition down to the two provider fields, so classification can be recorded out of band
      * without teaching a gateway or a model a Milpa-only key.
      *
+     * With a declared context, composition is DEFENSIVELY bounded to {@see WindowBudget}'s shares.
+     * The primary seam is upstream — a budgeted {@see Compactor} writes the summary already sized —
+     * so on a healthy stream these bounds never fire. They exist for the stream written before
+     * budgets did: an oversized summary must not explode the request today because it was written
+     * honestly yesterday. Every defensive cut follows the same discipline as the written path: the
+     * elision is named, and nothing in the stream is touched.
+     *
+     * @param int|null $contextTokens the model's declared context in tokens, or `null` to compose
+     *                                exactly as before budgets existed — byte-for-byte
+     *
      * @return list<array{role: string, content: string, class: value-of<WindowMessageClass>}>
      */
-    public function classifiedWindow(): array
+    public function classifiedWindow(?int $contextTokens = null): array
     {
+        $budget = $contextTokens === null ? null : new WindowBudget($contextTokens);
+
         $window = [];
         if ($this->summary !== null && $this->summary !== '') {
+            $content = "Resumen de lo que ya pasó en esta sesión:\n" . $this->summary;
+            if ($budget !== null) {
+                $content = self::boundedSummaryContent($content, $budget);
+            }
             $window[] = [
                 'role' => 'system',
-                'content' => "Resumen de lo que ya pasó en esta sesión:\n" . $this->summary,
+                'content' => $content,
                 'class' => WindowMessageClass::Summary->value,
             ];
         }
@@ -269,7 +288,7 @@ final readonly class Session
         // CURRENT STATE belongs after the summary and before the turns: it is what is known now, not
         // something that happened. The current plan is rendered rather than the historical one, so
         // the window describes where the session is instead of preserving a stale projection.
-        $state = $this->stateBriefing();
+        $state = $this->stateBriefing($budget === null ? null : $budget->chars($budget->briefingTokens));
         if ($state !== null) {
             $window[] = [
                 'role' => 'system',
@@ -278,9 +297,10 @@ final readonly class Session
             ];
         }
 
+        $turns = [];
         foreach ($this->turns as $turn) {
             if ($turn['seq'] > $this->compactedThrough) {
-                $window[] = [
+                $turns[] = [
                     'role' => $turn['role'],
                     'content' => self::paraLaVentana($turn),
                     'class' => WindowMessageClass::Turn->value,
@@ -288,7 +308,110 @@ final readonly class Session
             }
         }
 
-        return $window;
+        if ($budget !== null) {
+            $used = 0;
+            foreach ($window as $message) {
+                $used += mb_strlen($message['content']);
+            }
+            $turns = $this->turnsThatFit($turns, $budget, $used);
+        }
+
+        return array_merge($window, $turns);
+    }
+
+    /**
+     * The newest turns that fit what the composed share has left — never fewer than the newest one.
+     *
+     * When older turns do not fit, they are not silently absent: one system line NAMES how many
+     * were elided and where the whole record lives. The newest turn always stays even when it alone
+     * overflows the share, because a window that answers «what were we doing» wrong is worse than
+     * one slightly over budget.
+     *
+     * @param list<array{role: string, content: string, class: value-of<WindowMessageClass>}> $turns
+     *
+     * @return list<array{role: string, content: string, class: value-of<WindowMessageClass>}>
+     */
+    private function turnsThatFit(array $turns, WindowBudget $budget, int $usedChars): array
+    {
+        $remaining = max(0, $budget->chars($budget->composedTokens) - $usedChars);
+        $marker = fn (int $n): string => "[window budget: {$n} older turns elided from this window; "
+            . "the full stream persists in session {$this->id}]";
+
+        $firstKept = $this->firstTurnThatFits($turns, $remaining, 0);
+        if ($firstKept === 0) {
+            return $turns;
+        }
+
+        // Recompute once with the marker's own cost reserved: the marker is part of the window too.
+        $firstKept = $this->firstTurnThatFits($turns, $remaining, mb_strlen($marker($firstKept)));
+
+        return array_merge(
+            [[
+                'role' => 'system',
+                'content' => $marker($firstKept),
+                'class' => WindowMessageClass::Briefing->value,
+            ]],
+            \array_slice($turns, $firstKept),
+        );
+    }
+
+    /**
+     * Index of the oldest turn that still fits, walking from the newest — `0` when they all do.
+     *
+     * @param list<array{role: string, content: string, class: value-of<WindowMessageClass>}> $turns
+     */
+    private function firstTurnThatFits(array $turns, int $remaining, int $reserve): int
+    {
+        $chars = $reserve;
+        $first = \count($turns) === 0 ? 0 : \count($turns) - 1;
+        for ($i = \count($turns) - 1; $i >= 0; --$i) {
+            $len = mb_strlen($turns[$i]['content']);
+            if ($i < \count($turns) - 1 && $chars + $len > $remaining) {
+                break;
+            }
+            $chars += $len;
+            $first = $i;
+        }
+
+        return $first;
+    }
+
+    /**
+     * Re-bound a summary written before budgets existed, prose and facts each to their own share.
+     *
+     * The facts block is re-fitted through the SAME rule the writer uses — oldest first, elision
+     * named ({@see FactualSummarizer::fitOperationalFacts()}) — so an old stream and a new one obey
+     * one contract. Only when the content does not parse as prose-plus-facts does this fall back to
+     * a named clamp of the whole string: a defensive bound that guessed at structure would corrupt
+     * the very block it was protecting.
+     */
+    private static function boundedSummaryContent(string $content, WindowBudget $budget): string
+    {
+        $max = $budget->chars($budget->proseTokens + $budget->factsTokens);
+        if (mb_strlen($content) <= $max) {
+            return $content;
+        }
+
+        $labelAt = mb_strpos($content, FactualSummarizer::FACTS_LABEL);
+        if ($labelAt === false) {
+            return WindowBudget::clamp($content, $max);
+        }
+
+        $prose = mb_substr($content, 0, $labelAt);
+        $encoded = mb_substr($content, $labelAt + mb_strlen(FactualSummarizer::FACTS_LABEL));
+        $facts = json_decode($encoded, true);
+        if (!\is_array($facts)) {
+            return WindowBudget::clamp($content, $max);
+        }
+
+        $proseMax = $budget->chars($budget->proseTokens);
+        if (mb_strlen($prose) > $proseMax) {
+            $prose = WindowBudget::clamp(rtrim($prose), max(0, $proseMax - 1)) . "\n";
+        }
+        /** @var array<string, mixed> $facts */
+        $facts = FactualSummarizer::fitOperationalFacts($facts, $budget->chars($budget->factsTokens));
+
+        return $prose . FactualSummarizer::FACTS_LABEL . FactualSummarizer::encodeFacts($facts);
     }
 
     /**
@@ -298,7 +421,23 @@ final readonly class Session
      * lo que ya hizo. Es la falla más cara de una jornada larga porque se paga en pasos y en archivos
      * escritos dos veces, y no se nota hasta que alguien revisa el diff.
      */
-    public function stateBriefing(): ?string
+    public function stateBriefing(?int $maxChars = null): ?string
+    {
+        $entero = $this->briefingText(false);
+        if ($entero === null || $maxChars === null || mb_strlen($entero) <= $maxChars) {
+            return $entero;
+        }
+
+        // Over budget: the CLOSED todos collapse to a count — they answer «what already happened»,
+        // which the summary also answers — while the open ones stay whole, because they are the
+        // only lines that answer «what are we doing». The count names the elision.
+        $colapsado = $this->briefingText(true) ?? $entero;
+
+        return WindowBudget::clamp($colapsado, $maxChars);
+    }
+
+    /** The single writer of the briefing, whole or with the closed todos collapsed to a count. */
+    private function briefingText(bool $collapseDone): ?string
     {
         if (($this->plan === null || trim($this->plan) === '') && $this->todos === []) {
             return null;
@@ -311,7 +450,13 @@ final readonly class Session
 
         if ($this->todos !== []) {
             $lineas[] = 'Pendientes:';
+            $cerradas = 0;
             foreach ($this->todos as $todo) {
+                if ($collapseDone && $todo->status === TodoStatus::Done) {
+                    ++$cerradas;
+
+                    continue;
+                }
                 $marca = match ($todo->status) {
                     TodoStatus::Done => '[x]',
                     TodoStatus::InProgress => '[~]',
@@ -319,6 +464,9 @@ final readonly class Session
                     TodoStatus::Pending => '[ ]',
                 };
                 $lineas[] = "  {$marca} {$todo->id}: {$todo->text}";
+            }
+            if ($cerradas > 0) {
+                $lineas[] = "  [x] {$cerradas} tareas cerradas";
             }
         }
 

@@ -52,12 +52,49 @@ final readonly class Compactor
      *                       `maxTurns` — el 400 «exceeds context size» llega DESPUÉS, a media jornada.
      *                       Con esto la compactación dispara ANTES de enviar. `0` la apaga (solo turnos).
      */
+    /**
+     * @param int|null $windowBudget the model's DECLARED CONTEXT in tokens, or `null` for the
+     *                               unbudgeted behavior, byte-for-byte. When set, the composition is
+     *                               budgeted by construction ({@see WindowBudget} carries the split
+     *                               and the WHY): the turn tail is capped at the turns share — and
+     *                               by `$maxTokens` too when both speak, the narrower winning — the
+     *                               prose summary is written under the prose share, and the
+     *                               operational-facts block under the facts share, oldest entries
+     *                               elided first with the elision NAMED in the block itself.
+     *                               Measured need: greenhouse evidence/0443 — with every tool result
+     *                               capped and the tail budgeted, the UNBOUNDED system side still
+     *                               re-entered a 32,768-token context at 35.6k.
+     */
     public function __construct(
         private int $maxTurns = 40,
         private int $keepRecent = 12,
         private Summarizer $summarizer = new FactualSummarizer(),
         private int $maxTokens = 0,
+        private ?int $windowBudget = null,
     ) {
+    }
+
+    /** The derived shares, or `null` when this compactor was built without a declared context. */
+    private function budget(): ?WindowBudget
+    {
+        return $this->windowBudget === null ? null : new WindowBudget($this->windowBudget);
+    }
+
+    /**
+     * The tokens the unsummarized tail may hold before compaction fires — `0` means uncapped.
+     *
+     * With no declared context this IS `$maxTokens`, unchanged. With one, the turns share caps the
+     * tail even when `$maxTokens` was never set, and when both speak the narrower wins: a budget
+     * that could only widen an explicit cap would not be a budget.
+     */
+    private function tailTokens(): int
+    {
+        $budget = $this->budget();
+        if ($budget === null) {
+            return $this->maxTokens;
+        }
+
+        return $this->maxTokens > 0 ? min($this->maxTokens, $budget->turnTokens) : $budget->turnTokens;
     }
 
     /**
@@ -72,7 +109,7 @@ final readonly class Compactor
             $chars += \strlen((string) $t['content']);
         }
 
-        return intdiv($chars, 4);
+        return intdiv($chars, WindowBudget::CHARS_PER_TOKEN);
     }
 
     /** Si a esta sesión le toca compactar ahora. */
@@ -84,7 +121,9 @@ final readonly class Compactor
         }
 
         // Window-aware: compacta ANTES de que la ventana crezca hasta que el proveedor la rechace.
-        return $this->maxTokens > 0 && $this->estimateTokens($pend) > $this->maxTokens;
+        $cap = $this->tailTokens();
+
+        return $cap > 0 && $this->estimateTokens($pend) > $cap;
     }
 
     /**
@@ -103,11 +142,28 @@ final readonly class Compactor
         $pendientes = $this->pendientes($session);
         $corte = $this->cutPoint($pendientes);
 
-        $resumen = $this->summarizer->summarize($session, $corte);
+        $budget = $this->budget();
         $factual = $this->summarizer instanceof FactualSummarizer
             ? $this->summarizer
             : new FactualSummarizer();
-        $resumen = $factual->withOperationalFacts($resumen, $store->facts($session->id), $corte);
+        // The budgeted summary is WRITTEN bounded rather than trimmed after the fact: the writer
+        // knows what is cheap to collapse (closed todos become a count) and what must survive whole
+        // (what is pending, what the human decided). A custom summarizer's prose cannot be rebuilt,
+        // so it is clamped with the cut named — never silently.
+        if ($budget !== null && $this->summarizer instanceof FactualSummarizer) {
+            $resumen = $this->summarizer->boundedSummary($session, $corte, $budget->chars($budget->proseTokens));
+        } else {
+            $resumen = $this->summarizer->summarize($session, $corte);
+            if ($budget !== null) {
+                $resumen = WindowBudget::clamp($resumen, $budget->chars($budget->proseTokens));
+            }
+        }
+        $resumen = $factual->withOperationalFacts(
+            $resumen,
+            $store->facts($session->id),
+            $corte,
+            $budget?->factsTokens,
+        );
         $store->compact($session->id, $resumen, $corte);
 
         return $resumen;
@@ -124,7 +180,8 @@ final readonly class Compactor
     private function cutPoint(array $pend): int
     {
         $n = \count($pend);
-        $keepBudget = $this->maxTokens > 0 ? intdiv($this->maxTokens * 3, 5) : \PHP_INT_MAX;
+        $cap = $this->tailTokens();
+        $keepBudget = $cap > 0 ? intdiv($cap * 3, 5) : \PHP_INT_MAX;
         $tokens = 0;
         $keep = 0;
         for ($i = $n - 1; $i >= 0 && $keep < $this->keepRecent; $i--) {
