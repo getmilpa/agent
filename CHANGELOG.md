@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.33.0](https://github.com/getmilpa/agent/compare/v0.32.0...v0.33.0) (2026-09-01)
+
+
+### Features
+
+* preserve operational facts across compaction ([#69](https://github.com/getmilpa/agent/issues/69)) ([56654d3](https://github.com/getmilpa/agent/commit/56654d3193f4b0e7523d7a57ff02e76d82de312a))
+
 ## [0.32.0](https://github.com/getmilpa/agent/compare/v0.31.0...v0.32.0) (2026-09-01)
 
 
