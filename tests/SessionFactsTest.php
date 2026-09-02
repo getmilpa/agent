@@ -700,4 +700,230 @@ final class SessionFactsTest extends TestCase
         $failed = SessionFacts::of($events, 's1')->evidenceByPredicate('served', 'tareas-preview');
         self::assertFalse($failed['ok'], 'a receipt is only as true as the call that returned it');
     }
+
+    /**
+     * FRESHNESS — FRESH COVERS (greenhouse decisions/0187, the EvidenceReceipt continuation of D-02).
+     *
+     * A served receipt with nothing later that invalidates it is reported FRESH, at the seq it was
+     * observed, with no invalidator. This is the D-02 case preserved: a live receipt still covers.
+     */
+    public function testEvidenceByPredicateReportsAFreshReceiptWhenNothingInvalidatesIt(): void
+    {
+        $events = new InMemoryEventStore();
+        $store = new SessionStore($events);
+        $store->start('s1', 'author a live screen');
+        $store->recordToolCall(
+            's1',
+            'screen:declare',
+            ['name' => 'tareas-preview'],
+            (string) json_encode([
+                'ok' => true,
+                'screen' => 'tareas-preview',
+                'evidence' => ['predicate' => 'served', 'subject' => 'tareas-preview', 'servedAt' => '/live/page?component=tareas-preview'],
+            ]),
+            true,
+            true,
+        );
+
+        $found = SessionFacts::of($events, 's1')->evidenceByPredicate('served', 'tareas-preview');
+
+        self::assertTrue($found['ok']);
+        self::assertTrue($found['evidence']['fresh'], 'nothing invalidated it: fresh');
+        self::assertSame($found['evidence']['seq'], $found['evidence']['observedAtSeq']);
+        self::assertNull($found['evidence']['invalidatedAtSeq']);
+        self::assertSame(['tareas-preview'], $found['evidence']['scope'], 'default scope is the subject');
+    }
+
+    /**
+     * FRESHNESS — STALE (THE LEVER): a served receipt that a LATER fact for the SAME subject
+     * invalidated (a screen:forget declaring an invalidation of served/subject) is reported STALE,
+     * naming the seq that invalidated it — even though the receipt itself is the latest served one.
+     */
+    public function testEvidenceByPredicateReportsStaleWhenALaterFactInvalidatesTheSubject(): void
+    {
+        $events = new InMemoryEventStore();
+        $store = new SessionStore($events);
+        $store->start('s1', 'author then forget a live screen');
+        $store->recordToolCall(
+            's1',
+            'screen:declare',
+            ['name' => 'tareas-preview'],
+            (string) json_encode([
+                'ok' => true,
+                'screen' => 'tareas-preview',
+                'evidence' => ['predicate' => 'served', 'subject' => 'tareas-preview', 'servedAt' => '/live/page?component=tareas-preview'],
+            ]),
+            true,
+            true,
+        );
+        // A later successful call declares an INVALIDATION of the served receipt for the same subject.
+        $store->recordToolCall(
+            's1',
+            'screen:forget',
+            ['name' => 'tareas-preview'],
+            (string) json_encode([
+                'ok' => true,
+                'forgotten' => 'tareas-preview',
+                'evidence' => ['predicate' => 'served', 'subject' => 'tareas-preview', 'invalidates' => true],
+            ]),
+            true,
+            true,
+        );
+
+        $found = SessionFacts::of($events, 's1')->evidenceByPredicate('served', 'tareas-preview');
+
+        self::assertTrue($found['ok'], 'a receipt IS found; it is simply not fresh');
+        self::assertFalse($found['evidence']['fresh'], 'a later forget for the same subject makes it stale');
+        self::assertIsInt($found['evidence']['invalidatedAtSeq']);
+        self::assertGreaterThan($found['evidence']['seq'], $found['evidence']['invalidatedAtSeq']);
+        self::assertSame('screen:forget', $found['evidence']['invalidatedBy'], 'the invalidating operation is named');
+    }
+
+    /**
+     * FRESHNESS IS NOT FORGEABLE: the fresh/stale verdict is DERIVED from the stream, never read from
+     * a field the producer set. A receipt whose own payload claims `fresh: true` is still judged stale
+     * when a later forget exists.
+     */
+    public function testFreshnessIsDerivedFromTheStreamNotTheReceiptPayload(): void
+    {
+        $events = new InMemoryEventStore();
+        $store = new SessionStore($events);
+        $store->start('s1', 'craft a lying receipt');
+        // A crafted receipt that LIES: it asserts its own freshness in the payload.
+        $store->recordToolCall(
+            's1',
+            'screen:declare',
+            ['name' => 'tareas-preview'],
+            (string) json_encode([
+                'ok' => true,
+                'screen' => 'tareas-preview',
+                'evidence' => ['predicate' => 'served', 'subject' => 'tareas-preview', 'fresh' => true],
+            ]),
+            true,
+            true,
+        );
+        $store->recordToolCall(
+            's1',
+            'screen:forget',
+            ['name' => 'tareas-preview'],
+            (string) json_encode([
+                'ok' => true,
+                'forgotten' => 'tareas-preview',
+                'evidence' => ['predicate' => 'served', 'subject' => 'tareas-preview', 'invalidates' => true],
+            ]),
+            true,
+            true,
+        );
+
+        $found = SessionFacts::of($events, 's1')->evidenceByPredicate('served', 'tareas-preview');
+
+        self::assertFalse($found['evidence']['fresh'], 'the payload cannot buy its own freshness');
+    }
+
+    /**
+     * FRESHNESS — a later FAILED re-declare/supersede of the same served subject also makes the
+     * standing receipt stale: the model tried to re-establish it and the attempt did not hold, so the
+     * served state is in question and the fail-closed judge refuses it.
+     */
+    public function testAFailedReDeclareInvalidatesTheStandingReceipt(): void
+    {
+        $events = new InMemoryEventStore();
+        $store = new SessionStore($events);
+        $store->start('s1', 'author then fail to re-declare');
+        $store->recordToolCall(
+            's1',
+            'screen:declare',
+            ['name' => 'tareas-preview'],
+            (string) json_encode([
+                'ok' => true,
+                'screen' => 'tareas-preview',
+                'evidence' => ['predicate' => 'served', 'subject' => 'tareas-preview', 'servedAt' => '/live/page?component=tareas-preview'],
+            ]),
+            true,
+            true,
+        );
+        // A later re-declare that FAILED while naming the same served subject in its receipt.
+        $store->recordToolCall(
+            's1',
+            'screen:declare',
+            ['name' => 'tareas-preview'],
+            (string) json_encode([
+                'ok' => false,
+                'error' => 'unknown component type',
+                'evidence' => ['predicate' => 'served', 'subject' => 'tareas-preview'],
+            ]),
+            false,
+            true,
+        );
+
+        $found = SessionFacts::of($events, 's1')->evidenceByPredicate('served', 'tareas-preview');
+
+        self::assertTrue($found['ok']);
+        self::assertFalse($found['evidence']['fresh'], 'a failed re-declare puts the served state in question');
+    }
+
+    /**
+     * SCOPE HONOURED: a receipt declares what it covers. A receipt scoped to «dash» does not cover a
+     * claim naming «dash-detail» unless the scope declares it; a claim within the declared scope is
+     * covered.
+     */
+    public function testEvidenceByPredicateHonoursTheDeclaredScope(): void
+    {
+        $events = new InMemoryEventStore();
+        $store = new SessionStore($events);
+        $store->start('s1', 'declare a scoped screen');
+        $store->recordToolCall(
+            's1',
+            'screen:declare',
+            ['name' => 'dash'],
+            (string) json_encode([
+                'ok' => true,
+                'screen' => 'dash',
+                'evidence' => ['predicate' => 'served', 'subject' => 'dash', 'scope' => ['dash', 'dash-detail']],
+            ]),
+            true,
+            true,
+        );
+
+        $facts = SessionFacts::of($events, 's1');
+
+        $inScope = $facts->evidenceByPredicate('served', 'dash-detail');
+        self::assertTrue($inScope['ok'], 'a reference inside the declared scope is covered');
+        self::assertSame('dash', $inScope['evidence']['subject']);
+
+        $outOfScope = $facts->evidenceByPredicate('served', 'otra-pantalla');
+        self::assertFalse($outOfScope['ok'], 'a reference outside the declared scope is not covered');
+    }
+
+    /**
+     * BACKWARD-TOLERANT: a D-02-shaped plain receipt (predicate/subject/servedAt, no scope/freshness
+     * fields) is still read — subject-scoped, freshness computed from the stream — so no already
+     * recorded receipt is orphaned.
+     */
+    public function testAPlainD02ReceiptReadsAsSubjectScopedAndFresh(): void
+    {
+        $events = new InMemoryEventStore();
+        $store = new SessionStore($events);
+        $store->start('s1', 'a legacy receipt');
+        $store->recordToolCall(
+            's1',
+            'screen:declare',
+            ['name' => 'tareas-preview'],
+            (string) json_encode([
+                'ok' => true,
+                'screen' => 'tareas-preview',
+                // The exact D-02 shape: no scope, no freshness.
+                'evidence' => ['predicate' => 'served', 'subject' => 'tareas-preview', 'servedAt' => '/live/page?component=tareas-preview'],
+            ]),
+            true,
+            true,
+        );
+
+        $found = SessionFacts::of($events, 's1')->evidenceByPredicate('served', 'tareas-preview');
+
+        self::assertTrue($found['ok']);
+        self::assertTrue($found['evidence']['fresh']);
+        self::assertSame(['tareas-preview'], $found['evidence']['scope']);
+        self::assertSame('/live/page?component=tareas-preview', $found['evidence']['servedAt'], 'the observation still rides back');
+    }
 }
