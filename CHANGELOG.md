@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.40.0](https://github.com/getmilpa/agent/compare/v0.39.0...v0.40.0) (2026-09-02)
+
+
+### Features
+
+* WorkSnapshot — where the work stands, derived from the session stream ([#83](https://github.com/getmilpa/agent/issues/83)) ([004b66d](https://github.com/getmilpa/agent/commit/004b66dd3d2222743ae8dc9f31efe2e4a69e2ca7))
+
 ## [0.39.0](https://github.com/getmilpa/agent/compare/v0.38.0...v0.39.0) (2026-09-02)
 
 
