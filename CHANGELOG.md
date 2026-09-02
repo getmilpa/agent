@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.39.0](https://github.com/getmilpa/agent/compare/v0.38.0...v0.39.0) (2026-09-02)
+
+
+### Features
+
+* an evidence receipt declares its scope and freshness is derived ([#81](https://github.com/getmilpa/agent/issues/81)) ([b4d3e8b](https://github.com/getmilpa/agent/commit/b4d3e8b2846ef140f0d0ec7513a68be0c8d10ea0))
+
 ## [0.38.0](https://github.com/getmilpa/agent/compare/v0.37.0...v0.38.0) (2026-09-02)
 
 
