@@ -278,6 +278,23 @@ final readonly class SessionFacts
      * read, not indexed a second time. A failed call carries no covering receipt: a receipt is only
      * as true as the call that returned it.
      *
+     * ── FRESHNESS AND SCOPE (greenhouse decisions/0187, the EvidenceReceipt continuation of D-02) ──
+     *
+     * The receipt is read as an {@see EvidenceReceipt}, which adds the two dimensions D-02 deferred:
+     *
+     * - SCOPE: the lookup matches a receipt whose declared scope COVERS the queried subject, not only
+     *   one whose subject equals it. The default scope is the exact subject, so a plain D-02 receipt
+     *   keeps matching exactly; a receipt that declares a wider scope covers every reference in it.
+     * - FRESHNESS: the latest covering receipt is not trusted for being latest. Its `fresh` flag is
+     *   DERIVED by scanning the stream FORWARD for a later fact that invalidated it for the same
+     *   subject ({@see laterInvalidatorOf()}) — a `screen:forget` declaring the served predicate no
+     *   longer holds, or a failed re-declare of the same served subject. A stale receipt still
+     *   returns (`ok:true`) so the caller can name WHY it will not close a claim, carrying the seq it
+     *   was observed at, the seq that invalidated it, and the operation that did.
+     *
+     * The verdict is never read from the receipt payload: a receipt that asserts its own freshness
+     * buys nothing, because this reads later stream facts, not the field.
+     *
      * @return array<string, mixed>
      */
     public function evidenceByPredicate(string $predicate, string $subject): array
@@ -298,23 +315,34 @@ final readonly class SessionFacts
             if (! \is_array($decoded) || ! $this->callSucceeded($payload, $decoded)) {
                 continue;
             }
-            $receipt = $decoded['evidence'] ?? null;
-            if (! \is_array($receipt)
-                || ($receipt['predicate'] ?? null) !== $predicate
-                || ($receipt['subject'] ?? null) !== $subject
+            $producer = \is_string($payload['tool'] ?? null) ? $payload['tool'] : '?';
+            $receipt = EvidenceReceipt::fromEvidence($decoded['evidence'] ?? null, $producer);
+            // A covering receipt speaks to the predicate, covers the subject within its scope, and is
+            // not itself an invalidation (an anti-receipt revokes, it does not cover).
+            if ($receipt === null
+                || $receipt->invalidates
+                || ! $receipt->speaksTo($predicate)
+                || ! $receipt->coversReference($subject)
             ) {
                 continue;
             }
+
+            $invalidator = $this->laterInvalidatorOf($event->seq, $predicate, $subject);
 
             return [
                 'ok' => true,
                 'session' => $this->session,
                 'evidence' => [
                     'predicate' => $predicate,
-                    'subject' => $subject,
-                    'operation' => \is_string($payload['tool'] ?? null) ? $payload['tool'] : '?',
+                    'subject' => $receipt->subject,
+                    'scope' => $receipt->scope,
+                    'operation' => $producer,
                     'seq' => $event->seq,
-                    'servedAt' => \is_string($receipt['servedAt'] ?? null) ? $receipt['servedAt'] : null,
+                    'observedAtSeq' => $event->seq,
+                    'fresh' => $invalidator === null,
+                    'invalidatedAtSeq' => $invalidator['seq'] ?? null,
+                    'invalidatedBy' => $invalidator['operation'] ?? null,
+                    'servedAt' => $receipt->observation,
                     'evidence' => ['event' => SessionEvent::ToolCalled->value, 'seq' => $event->seq],
                 ],
             ];
@@ -325,6 +353,49 @@ final readonly class SessionFacts
             $predicate,
             $subject,
         ));
+    }
+
+    /**
+     * The later fact that invalidated a covering receipt, or `null` when the receipt is still fresh.
+     *
+     * Scans the stream FORWARD of the receipt's seq for the first ToolCalled event that either
+     * declares an INVALIDATION of the same predicate+subject (a successful anti-receipt, e.g.
+     * `screen:forget`) or is a FAILED re-declare/supersede naming the same subject and predicate in
+     * its receipt (the model tried to re-establish it and the attempt did not hold). Both put the
+     * demonstrated state in question, so the fail-closed judge treats the standing receipt as stale.
+     *
+     * The verdict is derived here, from recorded later facts — never from a field the receipt set.
+     *
+     * @return array{seq: int, operation: string}|null
+     */
+    private function laterInvalidatorOf(int $receiptSeq, string $predicate, string $subject): ?array
+    {
+        foreach ($this->events as $event) {
+            if ($event->seq <= $receiptSeq || $event->type !== SessionEvent::ToolCalled->value) {
+                continue;
+            }
+            $payload = $event->payload;
+            $decoded = $this->decodeResult($payload['result'] ?? '');
+            if (! \is_array($decoded)) {
+                continue;
+            }
+            $receipt = EvidenceReceipt::fromEvidence($decoded['evidence'] ?? null);
+            if ($receipt === null || ! $receipt->speaksTo($predicate) || ! $receipt->coversReference($subject)) {
+                continue;
+            }
+            $succeeded = $this->callSucceeded($payload, $decoded);
+            // A successful anti-receipt revokes it; a failed attempt to re-establish it also puts the
+            // served state in question. A succeeded, non-invalidating receipt is a fresh RE-DECLARE —
+            // the latest covering receipt handled it above, so it never reaches here as this receipt.
+            if (($succeeded && $receipt->invalidates) || ! $succeeded) {
+                return [
+                    'seq' => $event->seq,
+                    'operation' => \is_string($payload['tool'] ?? null) ? $payload['tool'] : '?',
+                ];
+            }
+        }
+
+        return null;
     }
 
     /**
