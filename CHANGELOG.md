@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.37.0](https://github.com/getmilpa/agent/compare/v0.36.0...v0.37.0) (2026-09-02)
+
+
+### Features
+
+* ProgressReceipt — semantic progress per call, derived from the stream (greenhouse decisions/0185) ([#77](https://github.com/getmilpa/agent/issues/77)) ([d40439a](https://github.com/getmilpa/agent/commit/d40439a3f3f946dbfbe44f51d6fc5617c41fd320))
+
 ## [0.36.0](https://github.com/getmilpa/agent/compare/v0.35.0...v0.36.0) (2026-09-01)
 
 
