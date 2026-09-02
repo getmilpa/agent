@@ -637,4 +637,67 @@ final class SessionFactsTest extends TestCase
             $store->facts('s1')->operationResult('make', 'GreeterService'),
         );
     }
+
+    /**
+     * A call whose result DECLARES an evidence receipt is found by predicate and subject, and the
+     * lookup keys on neither the tool that produced it nor the call order but the receipt itself.
+     */
+    public function testEvidenceByPredicateReadsAReceiptRegardlessOfProducer(): void
+    {
+        $events = new InMemoryEventStore();
+        $store = new SessionStore($events);
+        $store->start('s1', 'author a live screen');
+        // A producer OTHER than screen:declare, leaving the same served receipt: the reader must not
+        // key on the tool name, only on what the result DEMONSTRATES.
+        $store->recordToolCall(
+            's1',
+            'some-other-op',
+            ['name' => 'tareas-preview'],
+            (string) json_encode([
+                'ok' => true,
+                'screen' => 'tareas-preview',
+                'evidence' => ['predicate' => 'served', 'subject' => 'tareas-preview', 'servedAt' => '/live/page?component=tareas-preview'],
+            ]),
+            true,
+            true,
+        );
+
+        $found = SessionFacts::of($events, 's1')->evidenceByPredicate('served', 'tareas-preview');
+
+        self::assertTrue($found['ok']);
+        self::assertSame('served', $found['evidence']['predicate']);
+        self::assertSame('tareas-preview', $found['evidence']['subject']);
+        self::assertSame('some-other-op', $found['evidence']['operation'], 'the producer is reported, not matched on');
+        self::assertSame('/live/page?component=tareas-preview', $found['evidence']['servedAt']);
+    }
+
+    /** A different subject, or a failed call, carries no covering receipt: the lookup fails closed. */
+    public function testEvidenceByPredicateFailsClosedOnWrongSubjectOrFailedCall(): void
+    {
+        $events = new InMemoryEventStore();
+        $store = new SessionStore($events);
+        $store->start('s1', 'author a live screen');
+        // A failed call that nonetheless carries a served receipt in its result: the only reason to
+        // refuse it is that the call did not succeed, which is exactly the guard under test.
+        $store->recordToolCall(
+            's1',
+            'screen:declare',
+            ['name' => 'tareas-preview'],
+            (string) json_encode([
+                'ok' => false,
+                'error' => 'declaration failed',
+                'evidence' => ['predicate' => 'served', 'subject' => 'tareas-preview'],
+            ]),
+            false,
+            true,
+        );
+
+        $wrongSubject = SessionFacts::of($events, 's1')->evidenceByPredicate('served', 'otra-pantalla');
+        self::assertFalse($wrongSubject['ok']);
+        self::assertStringContainsString('otra-pantalla', (string) $wrongSubject['error']);
+
+        // Even the right subject is not covered when the call that would have served it failed.
+        $failed = SessionFacts::of($events, 's1')->evidenceByPredicate('served', 'tareas-preview');
+        self::assertFalse($failed['ok'], 'a receipt is only as true as the call that returned it');
+    }
 }

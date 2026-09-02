@@ -263,6 +263,71 @@ final readonly class SessionFacts
     }
 
     /**
+     * Return the last recorded call whose result DECLARES a matching evidence receipt, or `ok:false`.
+     *
+     * ── THE PREDICATE DIMENSION, PRODUCER-AGNOSTIC (greenhouse decisions/0187) ───────────────────
+     *
+     * The named readers above answer «what happened to THIS artifact/operation». This one answers
+     * «what did some call DEMONSTRATE», reading a receipt a producer left in its own result: a
+     * `evidence` object carrying a `predicate` and a `subject`. It matches on those two strings and
+     * on the call having succeeded — NEVER on which tool produced the receipt. So `screen:declare`'s
+     * served receipt and any future operation that serves a screen and declares the same predicate
+     * are read the same way; the judge that consumes this owes no branch per producer.
+     *
+     * The receipt travels in the same `session.tool_called` fact every call already leaves — it is
+     * read, not indexed a second time. A failed call carries no covering receipt: a receipt is only
+     * as true as the call that returned it.
+     *
+     * @return array<string, mixed>
+     */
+    public function evidenceByPredicate(string $predicate, string $subject): array
+    {
+        $predicate = trim($predicate);
+        $subject = trim($subject);
+        if ($predicate === '' || $subject === '') {
+            return $this->notFound('name the predicate and the subject whose evidence receipt should be recovered');
+        }
+
+        for ($i = \count($this->events) - 1; $i >= 0; --$i) {
+            $event = $this->events[$i];
+            if ($event->type !== SessionEvent::ToolCalled->value) {
+                continue;
+            }
+            $payload = $event->payload;
+            $decoded = $this->decodeResult($payload['result'] ?? '');
+            if (! \is_array($decoded) || ! $this->callSucceeded($payload, $decoded)) {
+                continue;
+            }
+            $receipt = $decoded['evidence'] ?? null;
+            if (! \is_array($receipt)
+                || ($receipt['predicate'] ?? null) !== $predicate
+                || ($receipt['subject'] ?? null) !== $subject
+            ) {
+                continue;
+            }
+
+            return [
+                'ok' => true,
+                'session' => $this->session,
+                'evidence' => [
+                    'predicate' => $predicate,
+                    'subject' => $subject,
+                    'operation' => \is_string($payload['tool'] ?? null) ? $payload['tool'] : '?',
+                    'seq' => $event->seq,
+                    'servedAt' => \is_string($receipt['servedAt'] ?? null) ? $receipt['servedAt'] : null,
+                    'evidence' => ['event' => SessionEvent::ToolCalled->value, 'seq' => $event->seq],
+                ],
+            ];
+        }
+
+        return $this->notFound(sprintf(
+            'no recorded call declares evidence predicate "%s" for subject "%s"',
+            $predicate,
+            $subject,
+        ));
+    }
+
+    /**
      * Return the last answered human decision and the two stream facts that evidence it.
      *
      * An unanswered question is not a decision. If an old or malformed stream has an answer without
