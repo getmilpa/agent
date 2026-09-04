@@ -206,6 +206,16 @@ enum SessionEvent: string
     case ModeChanged = 'session.mode_changed';
 
     /**
+     * Cambió el objetivo de la sesión (greenhouse decisions/0202).
+     *
+     * El goal nace del primer prompt (`session.started`) y hasta aquí era inmutable. El humano lo puede
+     * mover a media sesión — acotar, ampliar, reemplazar — y el gate lee el vigente como «petición
+     * vigente» (decisions/0009). Se apenda, nunca se reescribe: el ledger conserva cada objetivo que la
+     * sesión tuvo y cuándo cambió.
+     */
+    case GoalChanged = 'session.goal_changed';
+
+    /**
      * La sesión terminó **dejando trabajo declarado sin cerrar**, y eso se dice.
      *
      * ── POR QUÉ ES UN HECHO APARTE Y NO UN CAMPO DE `Ended` ─────────────────────────────────────

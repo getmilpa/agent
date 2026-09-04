@@ -243,6 +243,17 @@ final readonly class SessionProjector
                     'detailWhy' => \is_string($p['reason']['message'] ?? null) ? $p['reason']['message'] : null,
                 ],
             ],
+            // THE GOAL CHANGING IS PAINTED (greenhouse decisions/0202): the human moved the standing
+            // ask of the session, and whoever reads the transcript must see where it moved and to what.
+            // An empty goal is a clearing, and it is painted too — a null detail says «no standing goal».
+            SessionEvent::GoalChanged => [
+                ...$base,
+                'kind' => 'goal-changed',
+                'activity' => [
+                    'state' => 'goal-changed',
+                    'detail' => \is_string($p['goal'] ?? null) && $p['goal'] !== '' ? $p['goal'] : null,
+                ],
+            ],
             // ── THE EXECUTED OPERATION IS NOT A PER-EVENT CARD (greenhouse evidence/0284 → 0285) ────
             //
             // evidence/0284 first made this a per-event card, one per operation. evidence/0285 measured

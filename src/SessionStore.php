@@ -956,6 +956,17 @@ final readonly class SessionStore
         $this->append($id, SessionEvent::ModeChanged, ['mode' => $mode->value]);
     }
 
+    /**
+     * Cambia el objetivo vigente de la sesión (greenhouse decisions/0202).
+     *
+     * Una cadena vacía lo BORRA: la sesión vuelve a no tener más petición vigente que el prompt de
+     * cada turno. Como todo aquí, se apenda: el objetivo anterior sigue en el ledger.
+     */
+    public function setGoal(string $id, string $goal): void
+    {
+        $this->append($id, SessionEvent::GoalChanged, ['goal' => trim($goal)]);
+    }
+
     /** Cierra la sesión con el motivo por el que se cerró. */
     public function end(string $id, string $because): void
     {

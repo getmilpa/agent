@@ -264,6 +264,7 @@ final readonly class SessionReducer
                 SessionEvent::ModeChanged => $mode = AutonomyMode::tryFrom(
                     \is_string($p['mode'] ?? null) ? $p['mode'] : '',
                 ) ?? $mode,
+                SessionEvent::GoalChanged => $goal = \is_string($p['goal'] ?? null) ? $p['goal'] : $goal,
                 // LOS DOS HECHOS DE FRONTERA NO CAMBIAN EL FOLD, y decirlo aquí es la decisión que el
                 // `match` exhaustivo obliga a tomar en vez de dejar pasar:
                 //
