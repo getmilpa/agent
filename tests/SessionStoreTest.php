@@ -9,6 +9,7 @@ use Milpa\Agent\Evidence;
 use Milpa\Agent\PausedSequence;
 use Milpa\Agent\PendingQuestion;
 use Milpa\Agent\Principal;
+use Milpa\Agent\SessionEvent;
 use Milpa\Agent\SessionStore;
 use Milpa\Agent\Tests\Support\LegacyTodoWriter;
 use Milpa\Agent\Todo;
@@ -252,6 +253,24 @@ final class SessionStoreTest extends TestCase
 
         $almacen->setMode('s1', AutonomyMode::Auto);
         self::assertSame(AutonomyMode::Auto, $almacen->load('s1')?->mode);
+    }
+
+    /** El objetivo nace del primer prompt y el humano lo puede mover a media sesión (decisions/0202). */
+    public function testTheGoalCanChangeMidSessionAndAnEmptyOneClearsIt(): void
+    {
+        $eventos = new InMemoryEventStore();
+        $almacen = new SessionStore($eventos);
+        $almacen->start('s1', 'write a todo-app plugin');
+        self::assertSame('write a todo-app plugin', $almacen->load('s1')?->goal);
+
+        $almacen->setGoal('s1', '  write a todo-app plugin with a REST API  ');
+        self::assertSame('write a todo-app plugin with a REST API', $almacen->load('s1')?->goal, 'trimmed, and the fold reads the latest');
+
+        $almacen->setGoal('s1', '');
+        self::assertSame('', $almacen->load('s1')?->goal, 'an empty goal clears it');
+
+        $tipos = array_map(static fn ($e) => $e->type, $eventos->replay(SessionStore::PREFIX . 's1'));
+        self::assertSame(2, \count(array_keys($tipos, SessionEvent::GoalChanged->value, true)), 'both changes stay in the ledger');
     }
 
     /** Una sesión terminada deja de ser corrible, y dice por qué terminó. */
