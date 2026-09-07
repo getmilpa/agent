@@ -314,6 +314,12 @@ final readonly class SessionReducer
                 // disposable workspace, its promotion, its discard — all are evidence for the human
                 // who audits, read from the stream; none changes what the session IS.
                 SessionEvent::TrialRunRecorded, SessionEvent::TrialPromoted, SessionEvent::TrialDiscarded => null,
+                // A RECORDED COMPENSATION CHANGES NO SESSION STATE, and that is the decision, not an
+                // omission. It is a recipe left behind for whoever wants to undo the call it cites —
+                // running it is a NEW call with its own ceremony (greenhouse evidence/0556), so a
+                // session that carried «an undo is pending» in its state would be saying something
+                // nobody promised.
+                SessionEvent::CompensationRecorded => null,
                 // A PAUSED SEQUENCE STOPS THE SESSION exactly like an open PendingQuestion does
                 // (H-PERSIST-1, greenhouse decisions/0076): the fact IS the cursor, held here until
                 // its matching resume clears it — never re-derived from OperationExecuted, which

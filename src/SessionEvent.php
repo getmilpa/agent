@@ -366,6 +366,23 @@ enum SessionEvent: string
     case TrialDiscarded = 'session.trial_discarded';
 
     /**
+     * An operation that RAN named the operation that undoes it — the recipe, left in the ledger.
+     *
+     * greenhouse `.milpa/promises/reversal-contract.yaml` asks that a forward operation EMIT the
+     * invocation of its inverse as a recorded fact, so whoever undoes it takes it from the LEDGER
+     * instead of from the declaration. Its payload is `of`, `operation` and `call_seq`, and that last
+     * one is the whole design: **a compensation does not COPY arguments, it CITES them**
+     * (greenhouse decisions/0222). They already travel raw in the {@see self::ToolCalled} this seq
+     * points at, and a second copy would be a second inventory of the same truth — the very rule
+     * `arguments_digest` was written for.
+     *
+     * It is a RECIPE, never an authorisation: running the inverse is a new call and faces its own
+     * ceremony, because grants are keyed by operation name and the yes to the forward one does not
+     * cover it (greenhouse evidence/0556).
+     */
+    case CompensationRecorded = 'session.compensation_recorded';
+
+    /**
      * A GovernedSequence stopped mid-run, waiting for consent — and the session is now paused on
      * it, exactly as it pauses on an unanswered {@see self::QuestionAsked} (H-PERSIST-1, greenhouse
      * decisions/0076).
