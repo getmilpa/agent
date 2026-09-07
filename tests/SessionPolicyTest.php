@@ -184,12 +184,12 @@ final class SessionPolicyTest extends TestCase
 
     private function outboundRead(): EffectProfile
     {
-        return new EffectProfile(Mutation::None, Externality::ThirdParty, Reversibility::Guaranteed, Authority::Read, rollbackContract: 'nothing to roll back');
+        return new EffectProfile(Mutation::None, Externality::ThirdParty, Reversibility::NotApplicable, Authority::Read, rollbackContract: 'nothing to roll back');
     }
 
     private function localRead(): EffectProfile
     {
-        return new EffectProfile(Mutation::None, Externality::None, Reversibility::Guaranteed, Authority::Read, rollbackContract: 'nothing to roll back');
+        return new EffectProfile(Mutation::None, Externality::None, Reversibility::NotApplicable, Authority::Read, rollbackContract: 'nothing to roll back');
     }
 
     /** A read that leaves the perimeter (ThirdParty) pauses in ask mode, even though it mutates nothing here. */

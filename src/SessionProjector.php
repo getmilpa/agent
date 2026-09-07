@@ -306,6 +306,10 @@ final readonly class SessionProjector
             SessionEvent::AnswerWindowClosed,
             SessionEvent::PermissionGranted,
             SessionEvent::PermissionRevoked,
+            // A recorded compensation is a RECIPE, not a turn: it says what would undo the call the
+            // human just watched, and painting it in the live transcript would read as something
+            // having happened. What did happen is the ToolCalled it cites, already painted above.
+            SessionEvent::CompensationRecorded,
             SessionEvent::ModeChanged => null,
         };
     }

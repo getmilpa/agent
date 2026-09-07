@@ -217,8 +217,8 @@ final readonly class SessionStore
         bool $mutating = false,
         ?int $resultChars = null,
         ?bool $awaitingConfirmation = null,
-    ): void {
-        $this->append($id, SessionEvent::ToolCalled, [
+    ): int {
+        return $this->append($id, SessionEvent::ToolCalled, [
             'tool' => $tool,
             'arguments' => $arguments,
             'result' => $result,
@@ -847,6 +847,45 @@ final readonly class SessionStore
     }
 
     /**
+     * Graba la RECETA para deshacer lo que acaba de correr: qué operación lo deshace, y dónde están sus
+     * argumentos.
+     *
+     * **Una compensación no COPIA argumentos: los CITA** (greenhouse decisions/0222). `call_seq` apunta al
+     * {@see SessionEvent::ToolCalled} que ya los guarda crudos, así que este hecho no vuelve a escribirlos
+     * — la misma regla por la que `arguments_digest` es una referencia y no una segunda copia.
+     *
+     * Es una receta, NUNCA una autorización: correr la inversa es una llamada nueva con su propia
+     * ceremonia (greenhouse evidence/0556).
+     *
+     * @param array<string, mixed> $compensation `of`, `operation` y `call_seq`
+     */
+    public function recordCompensation(string $id, array $compensation): void
+    {
+        $of = $compensation['of'] ?? null;
+        $operation = $compensation['operation'] ?? null;
+        $seq = $compensation['call_seq'] ?? null;
+
+        if (!\is_string($of) || $of === '' || !\is_string($operation) || $operation === '') {
+            throw new \InvalidArgumentException(
+                'a compensation names what ran and what undoes it: one without either is a recipe for nothing',
+            );
+        }
+        if (!\is_int($seq) || $seq < 0) {
+            throw new \InvalidArgumentException(
+                'a compensation CITES the call whose arguments undo it («call_seq»): without the citation it '
+                . 'is a name with no recipe, and copying the arguments here would be a second inventory of '
+                . 'the same truth',
+            );
+        }
+
+        $this->append($id, SessionEvent::CompensationRecorded, [
+            'of' => $of,
+            'operation' => $operation,
+            'call_seq' => $seq,
+        ]);
+    }
+
+    /**
      * Graba que un trial workspace se descartó: sus escrituras murieron con él.
      *
      * @param array<string, mixed> $discard workspace
@@ -1115,13 +1154,25 @@ final readonly class SessionStore
     /**
      * @param array<string, mixed> $payload
      */
-    private function append(string $id, SessionEvent $type, array $payload): void
+    /**
+     * Apenda un hecho y contesta DÓNDE quedó.
+     *
+     * El seq se devuelve para que un hecho posterior pueda CITAR a éste en vez de repetirlo — lo que
+     * necesita {@see self::recordCompensation()}, y la razón por la que `recordToolCall()` dejó de ser
+     * `void`.
+     *
+     * @param array<string, mixed> $payload
+     */
+    private function append(string $id, SessionEvent $type, array $payload): int
     {
+        $seq = $this->events->nextSeq();
         $this->events->append(new Event(
             streamId: self::PREFIX . $id,
             type: $type->value,
             payload: $payload,
-            seq: $this->events->nextSeq(),
+            seq: $seq,
         ));
+
+        return $seq;
     }
 }
