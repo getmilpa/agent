@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.42.0](https://github.com/getmilpa/agent/compare/v0.41.0...v0.42.0) (2026-09-07)
+
+
+### Features
+
+* a compensation cites its call instead of copying its arguments ([#87](https://github.com/getmilpa/agent/issues/87)) ([ec3bd9a](https://github.com/getmilpa/agent/commit/ec3bd9a7d4620f341c4e864109dde131215de3fd))
+
 ## [0.41.0](https://github.com/getmilpa/agent/compare/v0.40.0...v0.41.0) (2026-09-04)
 
 
