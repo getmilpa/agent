@@ -42,6 +42,7 @@ final readonly class SessionReducer
     public function reduce(string $id, array $events): Session
     {
         $goal = '';
+        $startedBy = null;
         $mode = AutonomyMode::Ask;
         /** @var list<array{role: string, content: string, seq: int}> $turnos */
         $turnos = [];
@@ -91,6 +92,8 @@ final readonly class SessionReducer
                 SessionEvent::Started => [
                     $goal = \is_string($p['goal'] ?? null) ? $p['goal'] : '',
                     $mode = AutonomyMode::tryFrom(\is_string($p['mode'] ?? null) ? $p['mode'] : '') ?? AutonomyMode::Ask,
+                    // Who opened it, read from the record — never from the environment (evidence/0209).
+                    $startedBy = \is_array($p['by'] ?? null) ? Principal::fromArray($p['by']) : null,
                     // La filiación viaja en el evento de apertura y en ningún otro: de quién
                     // desciende una sesión no cambia, y un evento que pudiera cambiarlo volvería
                     // reescribible el árbol de permisos.
@@ -352,6 +355,7 @@ final readonly class SessionReducer
             pausedSequence: $secuenciaPausada,
             decisions: $decisiones,
             endedBecause: $terminada,
+            startedBy: $startedBy,
             ownershipAssertion: $ownership,
             evidence: $evidencias,
         );

@@ -51,6 +51,30 @@ final class SessionStoreTest extends TestCase
         self::assertSame([], $almacen->stream('nunca-existio'), 'an unknown session is an empty stream');
     }
 
+    /**
+     * WHO STARTED IT TRAVELS IN THE OPENING EVENT (greenhouse evidence/0561): a session opened over HTTP by a
+     * passkey used to start anonymous while its answers and executions named the human. The principal rides
+     * `session.started` and is read back from the record; without one, the start says nobody — it never
+     * fills the gap with whoever is reading.
+     */
+    public function testWhoStartedTheSessionIsRecordedInTheOpeningEventAndReadBack(): void
+    {
+        $almacen = $this->store();
+        $almacen->start('s1', 'deploy it', by: new Principal('actor:passkey:YkS3', true));
+        $almacen->start('s2', 'from a terminal');
+
+        $opening = $almacen->stream('s1')[0]->payload;
+        self::assertSame(['id' => 'actor:passkey:YkS3', 'verified' => true], $opening['by']);
+
+        $started = $almacen->load('s1')?->startedBy;
+        self::assertNotNull($started);
+        self::assertSame('actor:passkey:YkS3', $started->id);
+        self::assertTrue($started->verified);
+
+        self::assertNull($almacen->stream('s2')[0]->payload['by'], 'nobody presented a principal, and the record says so');
+        self::assertNull($almacen->load('s2')?->startedBy);
+    }
+
     public function testASessionSurvivesBeingReloaded(): void
     {
         $almacen = $this->store();

@@ -96,6 +96,8 @@ final readonly class Session
         // borraran, volvería a preguntarlas o —peor— volvería a suponerlas.
         public array $decisions = [],
         public ?string $endedBecause = null,
+        /** Who opened the session — the principal the opening event recorded, or `null` when nobody presented one. */
+        public ?Principal $startedBy = null,
         /** @var list<string> tools that must run before any other call proceeds */
         public array $runFirst = [],
         /**
