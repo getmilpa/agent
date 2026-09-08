@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.43.0](https://github.com/getmilpa/agent/compare/v0.42.0...v0.43.0) (2026-09-08)
+
+
+### Features
+
+* **session:** the opening event records who started the session ([#89](https://github.com/getmilpa/agent/issues/89)) ([664b9f1](https://github.com/getmilpa/agent/commit/664b9f192074ba08cdd6c1922f27e5638717ea88))
+
 ## [0.42.0](https://github.com/getmilpa/agent/compare/v0.41.0...v0.42.0) (2026-09-07)
 
 
