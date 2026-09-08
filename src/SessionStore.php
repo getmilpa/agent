@@ -70,11 +70,18 @@ final readonly class SessionStore
         string $goal,
         AutonomyMode $mode = AutonomyMode::Ask,
         ?string $parentId = null,
+        ?Principal $by = null,
     ): string {
+        // WHO STARTED IT travels in the opening event, and nowhere else — like the parentage. A session
+        // opened over HTTP by a passkey used to start anonymous (greenhouse evidence/0521, residue;
+        // evidence/0561): the answers named the human, the executions named the human, the start named
+        // nobody. `null` still means «nobody presented a principal», and the record says so rather than
+        // filling it with whoever was reading.
         $this->append($id, SessionEvent::Started, [
             'goal' => $goal,
             'mode' => $mode->value,
             'parentId' => $parentId,
+            'by' => $by?->toArray(),
         ]);
 
         return $id;
