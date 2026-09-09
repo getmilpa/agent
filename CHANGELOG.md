@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.43.2](https://github.com/getmilpa/agent/compare/v0.43.1...v0.43.2) (2026-09-09)
+
+
+### Bug Fixes
+
+* **projector:** a turn carries its content, and an answer says which question it settled ([#93](https://github.com/getmilpa/agent/issues/93)) ([02955cb](https://github.com/getmilpa/agent/commit/02955cbd1e5f07d54957a8f7ff76b2837bfcb8fa))
+
 ## [0.43.1](https://github.com/getmilpa/agent/compare/v0.43.0...v0.43.1) (2026-09-09)
 
 
