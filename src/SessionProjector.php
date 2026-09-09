@@ -173,6 +173,12 @@ final readonly class SessionProjector
                 ...$base,
                 'kind' => 'answered',
                 'answered' => [
+                    // WHICH question was answered (greenhouse decisions/0258). The fact carries the id
+                    // and this dropped it, so a surface showing the request could not tell that THIS one
+                    // had been decided — and a decision taken on another device left the buttons live on
+                    // every other, as if nothing had happened. Third case of the same narrowing in this
+                    // file; the rule is in decisions/0257 and it has now been paid for three times.
+                    'id' => \is_string($p['id'] ?? null) ? $p['id'] : '',
                     'answer' => \is_string($p['answer'] ?? null) ? $p['answer'] : '',
                     'by' => \is_array($p['by'] ?? null) ? $p['by'] : null,
                     'executor' => \is_string($p['executor'] ?? null) ? $p['executor'] : null,
@@ -188,6 +194,17 @@ final readonly class SessionProjector
             // Se proyectan una vez y cada superficie filtra lo que le sirve. La alternativa —una
             // segunda traducción para la actividad— sería la copia que esta clase existe para no
             // tener: dos lecturas del mismo stream que divergen en el evento que nadie probó.
+            // Y LLEVA SU CONTENIDO (greenhouse decisions/0258).
+            //
+            // Proyectaba sólo el ESTADO en que el turno dejó la sesión, así que la respuesta del agente
+            // viajaba únicamente en la respuesta del `POST /agent` — y eso da por hecho que quien
+            // pregunta y quien mira son el mismo. Con dos superficies abiertas sobre una sesión, una veía
+            // la respuesta y la otra no; Rod lo pidió al revés: empezar en el Desktop, seguir en el
+            // móvil, y que los demás dispositivos también.
+            //
+            // El `kind` y el `state` NO cambian: quien ya filtra por ellos no se entera. Y no se añade
+            // una segunda traducción del mismo evento — sería la copia que esta clase existe para no
+            // tener. Un turno se proyecta una vez, entero, y cada superficie toma lo que le sirve.
             SessionEvent::Turn => [
                 ...$base,
                 'kind' => 'activity',
@@ -196,6 +213,8 @@ final readonly class SessionProjector
                     // `assistant`, que contestó. Son los dos extremos de la espera.
                     'state' => \is_string($p['role'] ?? null) && $p['role'] === 'assistant' ? 'ready' : 'thinking',
                     'detail' => null,
+                    'role' => \is_string($p['role'] ?? null) ? $p['role'] : '',
+                    'text' => \is_string($p['content'] ?? null) ? $p['content'] : '',
                 ],
             ],
             // A MESSAGE IS ITS OWN KIND, not an activity turn.

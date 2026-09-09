@@ -263,6 +263,7 @@ final class SessionProjectorTest extends TestCase
         $contestada = array_values(array_filter($pintables, static fn (array $x): bool => $x['kind'] === 'answered'));
 
         self::assertCount(1, $contestada, 'la respuesta se proyecta, no se calla');
+        self::assertSame('q1', $contestada[0]['answered']['id'], 'CUÁL pregunta se contestó: sin eso, una superficie no puede cerrar la burbuja que corresponde');
         self::assertSame('sí', $contestada[0]['answered']['answer']);
         self::assertSame('cli:rod', $contestada[0]['answered']['executor']);
     }
@@ -314,6 +315,51 @@ final class SessionProjectorTest extends TestCase
         self::assertSame('', $esperando[0]['ended']['why']);
         self::assertSame('', $esperando[0]['ended']['reason']);
         self::assertSame('¿Y ahora?', $esperando[0]['ended']['question']);
+    }
+
+    /**
+     * F3 · UN TURNO LLEVA SU CONTENIDO, no sólo el estado en que dejó la sesión (greenhouse decisions/0258).
+     *
+     * La respuesta viajaba únicamente en la respuesta del `POST /agent`, y eso da por hecho que quien
+     * pregunta y quien mira son el mismo. Con dos dispositivos abiertos sobre una sesión, uno veía la
+     * respuesta y el otro no. Rod: «empiezo en Desktop y me paso a mobile… y a su vez los demás
+     * dispositivos».
+     */
+    public function testAnAssistantTurnCarriesItsContentSoAnySurfaceCanPaintIt(): void
+    {
+        $eventos = new InMemoryEventStore();
+        $almacen = new SessionStore($eventos);
+        $almacen->start('s1', '¿qué capacidades tengo?');
+        $almacen->recordTurn('s1', 'assistant', 'Tienes nueve capacidades instaladas.');
+
+        $pintables = (new SessionProjector())->projectAll($eventos->replay('agent-session:s1'));
+        $delAsistente = array_values(array_filter(
+            $pintables,
+            static fn (array $x): bool => $x['kind'] === 'activity' && ($x['activity']['role'] ?? '') === 'assistant',
+        ));
+
+        self::assertCount(1, $delAsistente);
+        self::assertSame('Tienes nueve capacidades instaladas.', $delAsistente[0]['activity']['text']);
+        self::assertSame('ready', $delAsistente[0]['activity']['state'], 'F4: el estado que los consumidores de hoy leen no cambia');
+    }
+
+    /** F3, el control: el turno del humano no se confunde con una respuesta. */
+    public function testAHumanTurnIsNotMistakenForAnAnswer(): void
+    {
+        $eventos = new InMemoryEventStore();
+        $almacen = new SessionStore($eventos);
+        $almacen->start('s1', 'x');
+        $almacen->recordTurn('s1', 'user', 'instala devtools');
+
+        $pintables = (new SessionProjector())->projectAll($eventos->replay('agent-session:s1'));
+        $delHumano = array_values(array_filter(
+            $pintables,
+            static fn (array $x): bool => $x['kind'] === 'activity' && ($x['activity']['role'] ?? '') === 'user',
+        ));
+
+        self::assertNotSame([], $delHumano);
+        self::assertSame('thinking', $delHumano[0]['activity']['state'], 'el humano habló: el modelo tiene la palabra');
+        self::assertSame('instala devtools', $delHumano[0]['activity']['text']);
     }
 
     public function testAnUnknownEventTypeIsNotGuessed(): void
