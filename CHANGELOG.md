@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.43.1](https://github.com/getmilpa/agent/compare/v0.43.0...v0.43.1) (2026-09-09)
+
+
+### Bug Fixes
+
+* **projector:** a parked question travels whole, with the options the agent proposed ([#91](https://github.com/getmilpa/agent/issues/91)) ([5e6636d](https://github.com/getmilpa/agent/commit/5e6636dcfd65768077905f7aa4b352a4dc8c07ea))
+
 ## [0.43.0](https://github.com/getmilpa/agent/compare/v0.42.0...v0.43.0) (2026-09-08)
 
 
