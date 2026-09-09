@@ -133,10 +133,32 @@ final readonly class SessionProjector
                 'kind' => 'ended',
                 'ended' => ['because' => \is_string($p['because'] ?? null) ? $p['because'] : ''],
             ],
+            // THE WHOLE QUESTION TRAVELS, not just its text (greenhouse decisions/0257).
+            //
+            // This projected `question` alone, so a surface reading the LIVE stream got a sentence and
+            // nothing to answer it with — while the same pause, read from `agent`'s own response, carried
+            // the options the agent proposed. Measured on a real turn against a local model: the panel
+            // painted the request with an empty row of buttons, because the fact had been narrowed on the
+            // way out. The options are the whole point of a parked question — they are what lets «2» be
+            // an answer from a terminal, a TUI or a chat without being interpreted again.
+            //
+            // Same lesson as `QuestionAnswered` right below, and found the same way: watching a real
+            // session with the page open, not reading this file.
             SessionEvent::QuestionAsked => [
                 ...$base,
                 'kind' => 'waiting',
-                'ended' => ['question' => \is_string($p['question'] ?? null) ? $p['question'] : ''],
+                'ended' => [
+                    'id' => \is_string($p['id'] ?? null) ? $p['id'] : '',
+                    'question' => \is_string($p['question'] ?? null) ? $p['question'] : '',
+                    'options' => array_values(array_filter(
+                        \is_array($p['options'] ?? null) ? $p['options'] : [],
+                        static fn (mixed $o): bool => \is_string($o) && $o !== '',
+                    )),
+                    'why' => \is_string($p['why'] ?? null) ? $p['why'] : '',
+                    // The STABLE code (`permission`, `signature`, `target_not_named`), so a projection can
+                    // group pauses by cause without parsing prose that gets rewritten and translated.
+                    'reason' => \is_string($p['reason'] ?? null) ? $p['reason'] : '',
+                ],
             ],
             // ANSWERING PROJECTS: it is what clears the waiting banner. This event translated to
             // `null` — «does not change what you see» — and that was false for the board: a surface

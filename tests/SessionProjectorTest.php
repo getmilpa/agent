@@ -267,6 +267,55 @@ final class SessionProjectorTest extends TestCase
         self::assertSame('cli:rod', $contestada[0]['answered']['executor']);
     }
 
+    /**
+     * A PARKED QUESTION TRAVELS WHOLE, and the options are the point (greenhouse decisions/0257).
+     *
+     * This projected only `question` — a sentence — so a surface reading the LIVE stream had nothing
+     * to answer it WITH, while the same pause read from `agent`'s own response carried the options.
+     * Measured on a real turn against a local model: the panel painted the request with an empty row
+     * of buttons, because the fact had been narrowed on the way out.
+     */
+    public function testAParkedQuestionTravelsWholeWithTheOptionsTheAgentProposed(): void
+    {
+        $eventos = new InMemoryEventStore();
+        $almacen = new SessionStore($eventos);
+        $almacen->start('s1', 'x');
+        $almacen->ask('s1', new \Milpa\Agent\PendingQuestion(
+            id: 'perm:capabilities:refresh',
+            question: '¿Autorizas «capabilities:refresh»?',
+            options: ['sí', 'no'],
+            why: 'instala código que corre en esta máquina',
+            reason: 'permission',
+        ));
+
+        $pintables = (new SessionProjector())->projectAll($eventos->replay('agent-session:s1'));
+        $esperando = array_values(array_filter($pintables, static fn (array $x): bool => $x['kind'] === 'waiting'));
+
+        self::assertCount(1, $esperando);
+        self::assertSame('perm:capabilities:refresh', $esperando[0]['ended']['id']);
+        self::assertSame('¿Autorizas «capabilities:refresh»?', $esperando[0]['ended']['question']);
+        self::assertSame(['sí', 'no'], $esperando[0]['ended']['options'], 'las opciones las propone el agente; sin ellas no hay con qué contestar');
+        self::assertSame('instala código que corre en esta máquina', $esperando[0]['ended']['why']);
+        self::assertSame('permission', $esperando[0]['ended']['reason'], 'el código ESTABLE, no la prosa');
+    }
+
+    /** El control: una pregunta que no propuso nada viaja igual, con vacíos honestos y sin inventar. */
+    public function testAQuestionThatProposedNothingTravelsWithHonestBlanks(): void
+    {
+        $eventos = new InMemoryEventStore();
+        $almacen = new SessionStore($eventos);
+        $almacen->start('s1', 'x');
+        $almacen->ask('s1', new \Milpa\Agent\PendingQuestion('q1', '¿Y ahora?'));
+
+        $pintables = (new SessionProjector())->projectAll($eventos->replay('agent-session:s1'));
+        $esperando = array_values(array_filter($pintables, static fn (array $x): bool => $x['kind'] === 'waiting'));
+
+        self::assertSame([], $esperando[0]['ended']['options'], 'ninguna opción inventada');
+        self::assertSame('', $esperando[0]['ended']['why']);
+        self::assertSame('', $esperando[0]['ended']['reason']);
+        self::assertSame('¿Y ahora?', $esperando[0]['ended']['question']);
+    }
+
     public function testAnUnknownEventTypeIsNotGuessed(): void
     {
         $evento = new \Milpa\EventStore\Event('agent-session:s1', 'algo.que.no.existe', [], 1);
