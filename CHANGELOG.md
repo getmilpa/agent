@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.44.0](https://github.com/getmilpa/agent/compare/v0.43.2...v0.44.0) (2026-09-13)
+
+
+### Features
+
+* record observed effects for session progress ([709c58a](https://github.com/getmilpa/agent/commit/709c58afde5a3682f4c004f4907d899996322697))
+* record observed effects for session progress (0346/0663) ([b12278d](https://github.com/getmilpa/agent/commit/b12278d21ff93f12714c7155529cdc71ca9fb34a))
+
 ## [0.43.2](https://github.com/getmilpa/agent/compare/v0.43.1...v0.43.2) (2026-09-09)
 
 
