@@ -355,6 +355,9 @@ enum SessionEvent: string
      */
     case TrialRunRecorded = 'session.trial_run_recorded';
 
+    /** A native observer measured one execution; its call links back to this fact (0346). */
+    case EffectObserved = 'session.effect_observed';
+
     /**
      * Effects observed in a trial workspace were INTRODUCED into the host — by `sandbox:promote`,
      * through the ordinary gate, consented by a human. The human did not authorise the trial after

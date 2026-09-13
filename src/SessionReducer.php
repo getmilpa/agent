@@ -316,7 +316,8 @@ final readonly class SessionReducer
                 // THE TRIAL FACTS DO NOT MOVE THE FOLD EITHER (greenhouse decisions/0069): a run in a
                 // disposable workspace, its promotion, its discard — all are evidence for the human
                 // who audits, read from the stream; none changes what the session IS.
-                SessionEvent::TrialRunRecorded, SessionEvent::TrialPromoted, SessionEvent::TrialDiscarded => null,
+                SessionEvent::TrialRunRecorded,
+                SessionEvent::EffectObserved, SessionEvent::TrialPromoted, SessionEvent::TrialDiscarded => null,
                 // A RECORDED COMPENSATION CHANGES NO SESSION STATE, and that is the decision, not an
                 // omission. It is a recipe left behind for whoever wants to undo the call it cites —
                 // running it is a NEW call with its own ceremony (greenhouse evidence/0556), so a

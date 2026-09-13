@@ -32,7 +32,11 @@ use Milpa\EventStore\Event;
  *
  * ── WHAT COUNTS, AND WHAT DELIBERATELY DOES NOT ─────────────────────────────────────────────────
  *
- * `newArtifacts` counts tool calls that were both mutating AND succeeded — honestly a PROXY: the
+ * Native calls may link an EffectObserved fact: measured identities supersede the proxy,
+ * deduplicated across the full session, with a separate lane for behavioral evidence. Missing or
+ * invalid linked observations yield UNKNOWN, never a fabricated zero or a fallback mutation.
+ *
+ * `newArtifacts` counts legacy tool calls that were both mutating AND succeeded — honestly a PROXY: the
  * stream sees calls, not filesystems, and a succeeded mutation is the closest fact it holds to «an
  * artifact materialized» ({@see SessionFacts} uses the same fact for its `materialized` state). A
  * call whose own result said `ok:false`, and a call that only ASKED for confirmation, never count —
@@ -54,13 +58,16 @@ final readonly class ProgressReceipt
     /** The progress verdict of a window that produced no evidence, no materialization, no closed todo. */
     public const STALLED = 'stalled';
 
+    /** No growth was proved and at least one execution could not be observed. */
+    public const UNKNOWN = 'unknown';
+
     /**
      * @param int    $fromSeq      the checkpoint: the last stream position already counted (exclusive)
      * @param int    $toSeq        the window's edge: the last position this receipt covers (inclusive)
      * @param int    $calls        `session.model_called` events in the window
      * @param int    $newFacts     succeeded tool calls of any kind — reads included, because a fact
      *                             is a fact even when it is not growth
-     * @param int    $newArtifacts succeeded MUTATING calls that actually did (not merely asked) —
+     * @param int    $newArtifacts calls with new observed artifact identities, or succeeded legacy mutations —
      *                             the materialization proxy the stream can see
      * @param int    $newEvidence  `session.evidence_recorded` events in the window
      * @param int    $closedTodos  `session.todo_changed` events reaching status `done`
@@ -98,9 +105,23 @@ final readonly class ProgressReceipt
         $newEvidence = 0;
         $closedTodos = 0;
         $newHouseDebt = 0;
+        $unknown = false;
+        $observations = [];
+        $usedObservations = [];
+        $seenArtifacts = [];
+        $seenEvidence = [];
+        $lastCallSeq = 0;
 
         foreach ($events as $event) {
-            if ($event->seq <= $fromSeq || $event->seq > $toSeq) {
+            if ($event->seq > $toSeq) {
+                continue;
+            }
+            if ($event->type === SessionEvent::EffectObserved->value) {
+                $observations[$event->seq] = $event;
+                continue;
+            }
+            $inside = $event->seq > $fromSeq;
+            if (!$inside && $event->type !== SessionEvent::ToolCalled->value) {
                 continue;
             }
 
@@ -111,13 +132,46 @@ final readonly class ProgressReceipt
                     break;
 
                 case SessionEvent::ToolCalled->value:
+                    $previousCallSeq = $lastCallSeq;
+                    $lastCallSeq = $event->seq;
                     if (!self::callSucceeded($event->payload)) {
                         break;
                     }
-                    ++$newFacts;
-                    if (($event->payload['mutating'] ?? false) === true
-                        && ($event->payload['awaitingConfirmation'] ?? null) !== true
-                    ) {
+                    if ($inside) {
+                        ++$newFacts;
+                    }
+                    if (($event->payload['awaitingConfirmation'] ?? null) === true) {
+                        break;
+                    }
+                    if (array_key_exists('effectObservationSeq', $event->payload)) {
+                        $seq = $event->payload['effectObservationSeq'];
+                        $witness = is_int($seq) ? ($observations[$seq] ?? null) : null;
+                        $valid = $witness !== null && $witness->seq < $event->seq && $witness->seq > $previousCallSeq
+                            && $witness->streamId === $event->streamId && !isset($usedObservations[$seq])
+                            && ($witness->payload['tool'] ?? null) === ($event->payload['tool'] ?? null)
+                            && ($witness->payload['argumentsDigest'] ?? null) === EffectObservation::argumentsDigest($event->payload['arguments'] ?? []);
+                        $observation = EffectObservation::fromArray($valid ? ($witness->payload['observation'] ?? null) : null);
+                        if (is_int($seq)) {
+                            $usedObservations[$seq] = true;
+                        }
+                        if (!$observation->known) {
+                            $unknown = $unknown || $inside;
+                            break;
+                        }
+                        $artifacts = array_diff($observation->artifacts, array_keys($seenArtifacts));
+                        $evidence = array_diff($observation->evidence, array_keys($seenEvidence));
+                        foreach ($observation->artifacts as $identity) {
+                            $seenArtifacts[$identity] = true;
+                        }
+                        foreach ($observation->evidence as $identity) {
+                            $seenEvidence[$identity] = true;
+                        }
+                        if ($inside) {
+                            $newArtifacts += $artifacts === [] ? 0 : 1;
+                            $newEvidence += $evidence === [] ? 0 : 1;
+                        }
+                    } elseif ($inside && ($event->payload['mutating'] ?? false) === true) {
+                        // Historical calls and producers without a witness retain their documented proxy.
                         ++$newArtifacts;
                     }
 
@@ -155,7 +209,7 @@ final readonly class ProgressReceipt
             $newEvidence,
             $closedTodos,
             $newHouseDebt,
-            $advancing ? self::ADVANCING : self::STALLED,
+            $advancing ? self::ADVANCING : ($unknown ? self::UNKNOWN : self::STALLED),
         );
     }
 

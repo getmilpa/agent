@@ -331,6 +331,7 @@ final readonly class SessionProjector
             // Trial facts (greenhouse decisions/0069) are audit material too: what ran in a copy, what
             // was promoted, what was discarded — read from the stream, not painted in the transcript.
             SessionEvent::TrialRunRecorded,
+            SessionEvent::EffectObserved,
             SessionEvent::TrialPromoted,
             SessionEvent::TrialDiscarded,
             // A paused/resumed sequence (H-PERSIST-1, greenhouse decisions/0076) is not painted by
