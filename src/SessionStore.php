@@ -224,6 +224,7 @@ final readonly class SessionStore
         bool $mutating = false,
         ?int $resultChars = null,
         ?bool $awaitingConfirmation = null,
+        ?int $effectObservationSeq = null,
     ): int {
         return $this->append($id, SessionEvent::ToolCalled, [
             'tool' => $tool,
@@ -259,6 +260,7 @@ final readonly class SessionStore
             // ahora no lo escribía, así que el stream no distinguía mirar de mover. Sin esa
             // distinción no se puede verificar nada sobre las mutaciones: son invisibles como tales.
             'mutating' => $mutating,
+            ...($effectObservationSeq === null ? [] : ['effectObservationSeq' => $effectObservationSeq]),
         ]);
     }
 
@@ -816,6 +818,18 @@ final readonly class SessionStore
         }
 
         $this->append($id, SessionEvent::CeilingComposed, ['composition' => $composition]);
+    }
+
+    /** Record a host observer's witness separately from tool output and policy.
+     * @param array<string, mixed> $arguments
+     */
+    public function recordEffectObservation(string $id, string $tool, array $arguments, EffectObservation $observation): int
+    {
+        return $this->append($id, SessionEvent::EffectObserved, [
+            'tool' => $tool,
+            'argumentsDigest' => EffectObservation::argumentsDigest($arguments),
+            'observation' => $observation->toArray(),
+        ]);
     }
 
     /**

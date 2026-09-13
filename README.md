@@ -214,3 +214,16 @@ Apache-2.0 © Rodrigo Vicente - TeamX Agency
 ---
 
 Milpa is designed, built, and maintained by **[Rodrigo Vicente - TeamX Agency](https://teamx.agency/?utm_source=github&utm_medium=readme&utm_campaign=milpa&utm_content=agent)**.
+
+### Effect observations and progress
+
+`SessionStore::recordEffectObservation()` records an execution observer's measured artifact and
+behavioral-evidence identities. Pass its sequence as `effectObservationSeq` to `recordToolCall()`.
+The observation is separate from tool output and the operation's `mutating` ceiling. `ProgressReceipt`
+checks the call/observation correlation and counts identities only once per session, including
+across progress windows. A proposal and its first host application have distinct identities.
+
+`EffectObservation(known: true)` with empty identity lists proves no measured growth. An unknown,
+missing, reused or mismatched linked observation yields `ProgressReceipt::UNKNOWN` unless another
+fact proves growth. Calls without a link keep the historical proxy for compatibility. These facts
+measure progress; they do not certify goal completion or change authorization (greenhouse0346/0663).
