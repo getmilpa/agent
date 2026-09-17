@@ -38,24 +38,25 @@ final class ModelCallIntake
      * composition that Session declared before the gateway added prompts, tool exchanges, or
      * provider-specific rewrites. They are deliberately not joined by position or content.
      *
-     * @param list<string>                                                                         $tools        Los nombres ofrecidos, en su orden.
-     * @param bool                                                                                 $toolsUnknown Viajaron herramientas y esta clase
-     *                                                                                                           no supo nombrarlas. NO es lo mismo que
-     *                                                                                                           no haber ofrecido ninguna.
-     * @param list<array{role: string, content: string}>                                           $messages     LO QUE VIAJÓ, no su tamaño. Los
-     *                                                                                                           turnos del stream son lo que la
-     *                                                                                                           sesión REGISTRÓ; esto es lo que
-     *                                                                                                           de verdad se mandó, y no siempre
-     *                                                                                                           coinciden — después de compactar,
-     *                                                                                                           la ventana lleva un resumen que
-     *                                                                                                           ningún turno contiene (greenhouse
-     *                                                                                                           decisions/0039).
-     * @param array<string, mixed>|null                                                            $omitted      Lo que alguien DECLARÓ haber
-     *                                                                                                           retenido. `null` es «nadie dijo»,
-     *                                                                                                           nunca «nada».
-     * @param list<array{role: string, content: string, class: value-of<WindowMessageClass>}>|null $window       The logical window declared by its
-     *                                                                                                           composer. It travels beside the
-     *                                                                                                           wire payload and never inside it.
+     * @param list<string>                                                                         $tools          Los nombres ofrecidos, en su orden.
+     * @param bool                                                                                 $toolsUnknown   Viajaron herramientas y esta clase
+     *                                                                                                             no supo nombrarlas. NO es lo mismo que
+     *                                                                                                             no haber ofrecido ninguna.
+     * @param list<array{role: string, content: string}>                                           $messages       LO QUE VIAJÓ, no su tamaño. Los
+     *                                                                                                             turnos del stream son lo que la
+     *                                                                                                             sesión REGISTRÓ; esto es lo que
+     *                                                                                                             de verdad se mandó, y no siempre
+     *                                                                                                             coinciden — después de compactar,
+     *                                                                                                             la ventana lleva un resumen que
+     *                                                                                                             ningún turno contiene (greenhouse
+     *                                                                                                             decisions/0039).
+     * @param array<string, mixed>|null                                                            $omitted        Lo que alguien DECLARÓ haber
+     *                                                                                                             retenido. `null` es «nadie dijo»,
+     *                                                                                                             nunca «nada».
+     * @param list<array{role: string, content: string, class: value-of<WindowMessageClass>}>|null $window         The logical window declared by its
+     *                                                                                                             composer. It travels beside the
+     *                                                                                                             wire payload and never inside it.
+     * @param array<string,mixed>|null                                                             $responseFormat Explicit provider-wire output format, when observed.
      */
     private function __construct(
         public readonly string $endpoint,
@@ -66,6 +67,7 @@ final class ModelCallIntake
         public readonly array $messages,
         public readonly ?array $omitted,
         public readonly ?array $window,
+        public readonly ?array $responseFormat,
     ) {
     }
 
@@ -115,7 +117,17 @@ final class ModelCallIntake
 
         [$tools, $desconocidas] = self::leerTools($payload['tools'] ?? null);
 
-        return new self($uri, (string) ($payload['model'] ?? '?'), $tools, $desconocidas, $system, $mensajes, $omitted, $window);
+        return new self(
+            $uri,
+            (string) ($payload['model'] ?? '?'),
+            $tools,
+            $desconocidas,
+            $system,
+            $mensajes,
+            $omitted,
+            $window,
+            is_array($payload['response_format'] ?? null) ? $payload['response_format'] : null
+        );
     }
 
     /**
@@ -185,6 +197,10 @@ final class ModelCallIntake
 
         if ($this->window !== null) {
             $payload['window'] = $this->window;
+        }
+
+        if ($this->responseFormat !== null) {
+            $payload['response_format'] = $this->responseFormat;
         }
 
         return $payload;

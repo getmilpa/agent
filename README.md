@@ -54,6 +54,12 @@ $session->classifiedWindow(); // the same window with summary / briefing / turn 
 $session->isRunnable();
 ```
 
+`ModelCallIntake::fromChannelPayload()` also retains an explicitly observed `response_format`
+in the durable `session.model_called` payload. It copies the provider-wire object without
+deriving it from a prompt or criterion. When no object was observed, the field is absent and the
+existing event shape is unchanged. A format observation records a request; it does not establish
+that the provider complied or that the answer is correct.
+
 ## Why event-sourced
 
 Because what matters about a long session is both **where it ended up** and **how it got there**. A
