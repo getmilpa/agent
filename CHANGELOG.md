@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.45.0](https://github.com/getmilpa/agent/compare/v0.44.0...v0.45.0) (2026-09-17)
+
+
+### Features
+
+* retain explicit model response format in native intake (greenhouse 0421) ([e777570](https://github.com/getmilpa/agent/commit/e7775708b7b6c8a8b0ecdacc7de9e8f961921c3d))
+
 ## [0.44.0](https://github.com/getmilpa/agent/compare/v0.43.2...v0.44.0) (2026-09-13)
 
 
