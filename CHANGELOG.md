@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.47.0](https://github.com/getmilpa/agent/compare/v0.46.0...v0.47.0) (2026-09-17)
+
+
+### Features
+
+* retain observed provider output limits in model intake ([a1a2809](https://github.com/getmilpa/agent/commit/a1a2809966a8438394066a32c771b90eb2d11092))
+
 ## [0.46.0](https://github.com/getmilpa/agent/compare/v0.45.0...v0.46.0) (2026-09-17)
 
 
