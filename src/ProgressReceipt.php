@@ -62,18 +62,19 @@ final readonly class ProgressReceipt
     public const UNKNOWN = 'unknown';
 
     /**
-     * @param int    $fromSeq      the checkpoint: the last stream position already counted (exclusive)
-     * @param int    $toSeq        the window's edge: the last position this receipt covers (inclusive)
-     * @param int    $calls        `session.model_called` events in the window
-     * @param int    $newFacts     succeeded tool calls of any kind — reads included, because a fact
-     *                             is a fact even when it is not growth
-     * @param int    $newArtifacts calls with new observed artifact identities, or succeeded legacy mutations —
-     *                             the materialization proxy the stream can see
-     * @param int    $newEvidence  `session.evidence_recorded` events in the window
-     * @param int    $closedTodos  `session.todo_changed` events reaching status `done`
-     * @param int    $newHouseDebt additive `session.debt_signaled` events the house emitted
-     * @param string $progress     {@see self::ADVANCING} when evidence + artifacts + closed todos
-     *                             grew; {@see self::STALLED} otherwise
+     * @param int    $fromSeq        the checkpoint: the last stream position already counted (exclusive)
+     * @param int    $toSeq          the window's edge: the last position this receipt covers (inclusive)
+     * @param int    $calls          `session.model_called` events in the window
+     * @param int    $newFacts       succeeded tool calls of any kind — reads included, because a fact
+     *                               is a fact even when it is not growth
+     * @param int    $newArtifacts   calls with new observed artifact identities, or succeeded legacy mutations —
+     *                               the materialization proxy the stream can see
+     * @param int    $newEvidence    `session.evidence_recorded` events in the window
+     * @param int    $closedTodos    `session.todo_changed` events reaching status `done`
+     * @param int    $newHouseDebt   additive `session.debt_signaled` events the house emitted
+     * @param int    $newDiagnostics new observer-backed diagnostic identities, not positive evidence
+     * @param string $progress       {@see self::ADVANCING} when evidence + artifacts + closed todos
+     *                               grew; {@see self::STALLED} otherwise
      */
     public function __construct(
         public int $fromSeq,
@@ -85,6 +86,7 @@ final readonly class ProgressReceipt
         public int $closedTodos,
         public int $newHouseDebt,
         public string $progress,
+        public int $newDiagnostics = 0,
     ) {
     }
 
@@ -103,6 +105,7 @@ final readonly class ProgressReceipt
         $newFacts = 0;
         $newArtifacts = 0;
         $newEvidence = 0;
+        $newDiagnostics = 0;
         $closedTodos = 0;
         $newHouseDebt = 0;
         $unknown = false;
@@ -110,6 +113,7 @@ final readonly class ProgressReceipt
         $usedObservations = [];
         $seenArtifacts = [];
         $seenEvidence = [];
+        $seenDiagnostics = [];
         $lastCallSeq = 0;
 
         foreach ($events as $event) {
@@ -134,10 +138,8 @@ final readonly class ProgressReceipt
                 case SessionEvent::ToolCalled->value:
                     $previousCallSeq = $lastCallSeq;
                     $lastCallSeq = $event->seq;
-                    if (!self::callSucceeded($event->payload)) {
-                        break;
-                    }
-                    if ($inside) {
+                    $succeeded = self::callSucceeded($event->payload);
+                    if ($inside && $succeeded) {
                         ++$newFacts;
                     }
                     if (($event->payload['awaitingConfirmation'] ?? null) === true) {
@@ -155,7 +157,17 @@ final readonly class ProgressReceipt
                             $usedObservations[$seq] = true;
                         }
                         if (!$observation->known) {
-                            $unknown = $unknown || $inside;
+                            $unknown = $unknown || ($inside && $succeeded);
+                            break;
+                        }
+                        $diagnostics = array_diff($observation->diagnostics, array_keys($seenDiagnostics));
+                        foreach ($observation->diagnostics as $identity) {
+                            $seenDiagnostics[$identity] = true;
+                        }
+                        if ($inside && $diagnostics !== []) {
+                            ++$newDiagnostics;
+                        }
+                        if (!$succeeded) {
                             break;
                         }
                         $artifacts = array_diff($observation->artifacts, array_keys($seenArtifacts));
@@ -170,7 +182,7 @@ final readonly class ProgressReceipt
                             $newArtifacts += $artifacts === [] ? 0 : 1;
                             $newEvidence += $evidence === [] ? 0 : 1;
                         }
-                    } elseif ($inside && ($event->payload['mutating'] ?? false) === true) {
+                    } elseif ($inside && $succeeded && ($event->payload['mutating'] ?? false) === true) {
                         // Historical calls and producers without a witness retain their documented proxy.
                         ++$newArtifacts;
                     }
@@ -198,7 +210,7 @@ final readonly class ProgressReceipt
             }
         }
 
-        $advancing = $newEvidence + $newArtifacts + $closedTodos > 0;
+        $advancing = $newEvidence + $newArtifacts + $closedTodos + $newDiagnostics > 0;
 
         return new self(
             $fromSeq,
@@ -210,6 +222,7 @@ final readonly class ProgressReceipt
             $closedTodos,
             $newHouseDebt,
             $advancing ? self::ADVANCING : ($unknown ? self::UNKNOWN : self::STALLED),
+            $newDiagnostics,
         );
     }
 
@@ -218,7 +231,7 @@ final readonly class ProgressReceipt
      * re-deriving it from the stream.
      *
      * @return array{fromSeq: int, toSeq: int, calls: int, newFacts: int, newArtifacts: int,
-     *               newEvidence: int, closedTodos: int, newHouseDebt: int, progress: string}
+     *               newEvidence: int, newDiagnostics: int, closedTodos: int, newHouseDebt: int, progress: string}
      */
     public function toArray(): array
     {
@@ -229,6 +242,7 @@ final readonly class ProgressReceipt
             'newFacts' => $this->newFacts,
             'newArtifacts' => $this->newArtifacts,
             'newEvidence' => $this->newEvidence,
+            'newDiagnostics' => $this->newDiagnostics,
             'closedTodos' => $this->closedTodos,
             'newHouseDebt' => $this->newHouseDebt,
             'progress' => $this->progress,

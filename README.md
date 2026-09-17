@@ -233,3 +233,14 @@ across progress windows. A proposal and its first host application have distinct
 missing, reused or mismatched linked observation yields `ProgressReceipt::UNKNOWN` unless another
 fact proves growth. Calls without a link keep the historical proxy for compatibility. These facts
 measure progress; they do not certify goal completion or change authorization (greenhouse0346/0663).
+
+An observer can additionally provide `diagnostics` identities for newly established diagnostic
+information. `ProgressReceipt::newDiagnostics` counts each bound identity once per session,
+including across restarts and checkpoints, even when the observed tool reports failure. Such a
+call contributes no successful fact, artifact, positive evidence or completed todo. Repeating the
+same diagnostic does not reset recovery. Confirmation-only calls and mismatched observation links
+cannot contribute it. Producers remain responsible for stable identities and an observed outcome.
+
+Observations containing diagnostic identities use `milpa.agent.effect-observation/v2`; observations
+without them retain the v1 wire shape. This reader accepts both; malformed or unknown versions
+remain unknown. Greenhouse decision0429/evidence0751 defines this distinction.
