@@ -54,6 +54,11 @@ $session->classifiedWindow(); // the same window with summary / briefing / turn 
 $session->isRunnable();
 ```
 
+`ModelCallIntake::fromChannelPayload()` retains provider output-limit fields in `outputBudget`:
+`max_completion_tokens` and `max_tokens`, with their exact observed values. Absence stays absent;
+it never inserts the gateway default. This records wire evidence, including malformed or
+conflicting fields, rather than validating a budget or promising available context capacity.
+
 `ModelCallIntake::fromChannelPayload()` also retains an explicitly observed `response_format`
 in the durable `session.model_called` payload. It copies the provider-wire object without
 deriving it from a prompt or criterion. When no object was observed, the field is absent and the

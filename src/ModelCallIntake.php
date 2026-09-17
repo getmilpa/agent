@@ -57,6 +57,7 @@ final class ModelCallIntake
      *                                                                                                             composer. It travels beside the
      *                                                                                                             wire payload and never inside it.
      * @param array<string,mixed>|null                                                             $responseFormat Explicit provider-wire output format, when observed.
+     * @param array<string,mixed>|null                                                             $outputBudget   Output-limit fields exactly as observed, not inferred defaults.
      */
     private function __construct(
         public readonly string $endpoint,
@@ -68,6 +69,7 @@ final class ModelCallIntake
         public readonly ?array $omitted,
         public readonly ?array $window,
         public readonly ?array $responseFormat,
+        public readonly ?array $outputBudget,
     ) {
     }
 
@@ -126,7 +128,8 @@ final class ModelCallIntake
             $mensajes,
             $omitted,
             $window,
-            is_array($payload['response_format'] ?? null) ? $payload['response_format'] : null
+            is_array($payload['response_format'] ?? null) ? $payload['response_format'] : null,
+            array_intersect_key($payload, array_flip(['max_completion_tokens', 'max_tokens'])) ?: null
         );
     }
 
@@ -201,6 +204,10 @@ final class ModelCallIntake
 
         if ($this->responseFormat !== null) {
             $payload['response_format'] = $this->responseFormat;
+        }
+
+        if ($this->outputBudget !== null) {
+            $payload['outputBudget'] = $this->outputBudget;
         }
 
         return $payload;
