@@ -18,21 +18,27 @@ final readonly class EffectObservation
     /** @var list<string> */
     public array $evidence;
 
+    /** @var list<string> Distinct diagnostic observations, never positive verification. */
+    public array $diagnostics;
+
     /** Validate raw observer input before exposing typed identities.
      * @param array<mixed> $artifacts
      * @param array<mixed> $evidence
+     * @param array<mixed> $diagnostics
      */
     public function __construct(
         public string $producer,
         public bool $known,
         array $artifacts = [],
         array $evidence = [],
+        array $diagnostics = [],
     ) {
-        if (trim($producer) === '' || (!$known && ($artifacts !== [] || $evidence !== []))) {
+        if (trim($producer) === '' || (!$known && ($artifacts !== [] || $evidence !== [] || $diagnostics !== []))) {
             throw new \InvalidArgumentException('An observation names its producer; unknown cannot assert effects.');
         }
         $this->artifacts = self::identities($artifacts);
         $this->evidence = self::identities($evidence);
+        $this->diagnostics = self::identities($diagnostics);
     }
 
     /**
@@ -56,24 +62,30 @@ final readonly class EffectObservation
     }
 
     /** Serialize the measured identities and their provenance.
-     * @return array{schema: string, producer: string, known: bool, artifacts: list<string>, evidence: list<string>}
+     * @return array{schema: string, producer: string, known: bool, artifacts: list<string>, evidence: list<string>, diagnostics?: list<string>}
      */
     public function toArray(): array
     {
-        return ['schema' => 'milpa.agent.effect-observation/v1', 'producer' => $this->producer,
-            'known' => $this->known, 'artifacts' => $this->artifacts, 'evidence' => $this->evidence];
+        return ['schema' => $this->diagnostics === [] ? 'milpa.agent.effect-observation/v1' : 'milpa.agent.effect-observation/v2', 'producer' => $this->producer,
+            'known' => $this->known, 'artifacts' => $this->artifacts, 'evidence' => $this->evidence]
+            + ($this->diagnostics === [] ? [] : ['diagnostics' => $this->diagnostics]);
     }
 
     /** Malformed or newer wire observations remain unknown, never a legacy proxy. */
     public static function fromArray(mixed $value): self
     {
         try {
-            if (!is_array($value) || ($value['schema'] ?? null) !== 'milpa.agent.effect-observation/v1'
+            if (!is_array($value) || !in_array($value['schema'] ?? null, ['milpa.agent.effect-observation/v1', 'milpa.agent.effect-observation/v2'], true)
                 || !is_string($value['producer'] ?? null) || !is_bool($value['known'] ?? null)
                 || !is_array($value['artifacts'] ?? null) || !is_array($value['evidence'] ?? null)) {
                 throw new \InvalidArgumentException('Unrecognized observation.');
             }
-            return new self($value['producer'], $value['known'], $value['artifacts'], $value['evidence']);
+            $diagnostics = $value['diagnostics'] ?? [];
+            if (($value['schema'] === 'milpa.agent.effect-observation/v2' && !is_array($value['diagnostics'] ?? null))
+                || ($value['schema'] === 'milpa.agent.effect-observation/v1' && array_key_exists('diagnostics', $value))) {
+                throw new \InvalidArgumentException('Diagnostic identities require the versioned observation schema.');
+            }
+            return new self($value['producer'], $value['known'], $value['artifacts'], $value['evidence'], $diagnostics);
         } catch (\InvalidArgumentException) {
             return new self('unrecognized-observation', false);
         }

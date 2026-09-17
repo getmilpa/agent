@@ -285,6 +285,7 @@ final class ProgressReceiptTest extends TestCase
             'newFacts' => 0,
             'newArtifacts' => 0,
             'newEvidence' => 0,
+            'newDiagnostics' => 0,
             'closedTodos' => 0,
             'newHouseDebt' => 0,
             'progress' => 'stalled',
