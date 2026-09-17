@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.46.0](https://github.com/getmilpa/agent/compare/v0.45.0...v0.46.0) (2026-09-17)
+
+
+### Features
+
+* distinguish diagnostic novelty from positive verification ([24e2f34](https://github.com/getmilpa/agent/commit/24e2f346c9b8b5e4b3b9dc45872449067c93c83a))
+
 ## [0.45.0](https://github.com/getmilpa/agent/compare/v0.44.0...v0.45.0) (2026-09-17)
 
 
