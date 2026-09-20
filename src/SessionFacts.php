@@ -51,6 +51,13 @@ final readonly class SessionFacts
     /** Maximum characters returned for a verification's detail. */
     private const MAX_DETAIL_CHARS = 2_000;
 
+    /** Explain recovery once per projection so repeated hints do not crowd out recorded facts. */
+    private const RESULT_RECOVERY_POLICY = [
+        'refetch' => 'new_read_not_recorded_result',
+        'reinvoke' => 'not_result_recovery',
+        'admission' => 'not_evaluated',
+    ];
+
     /**
      * Lifecycle ranks from least to most proven. `superseded` sits below `verified` on purpose: it
      * WAS verified and then touched again, so presenting it as still-verified would be the stale
@@ -117,11 +124,14 @@ final readonly class SessionFacts
         }
 
         $calls = [];
+        $hasTruncatedResult = false;
         $executions = [];
         $evidence = [];
         foreach ($this->events as $event) {
             if ($event->type === SessionEvent::ToolCalled->value) {
-                $calls[] = $this->operationalCall($event, $asOfSeq, $event->seq <= $throughSeq);
+                $call = $this->operationalCall($event, $asOfSeq, $event->seq <= $throughSeq);
+                $calls[] = $call;
+                $hasTruncatedResult = $hasTruncatedResult || $call['resultTruncated'] === true;
             } elseif ($event->type === SessionEvent::OperationExecuted->value) {
                 $executions[] = $this->executionFact($event, $asOfSeq, $event->seq <= $throughSeq);
             } elseif ($event->type === SessionEvent::EvidenceRecorded->value) {
@@ -142,6 +152,7 @@ final readonly class SessionFacts
             // «attempted but not materialized» would be a distinction the model has to carry in its
             // own reasoning — which a measured run showed it pays tokens for, and loses.
             'workState' => $this->artifactWorkStates(),
+            ...($hasTruncatedResult ? ['resultRecovery' => self::RESULT_RECOVERY_POLICY] : []),
         ];
     }
 
@@ -720,23 +731,32 @@ final readonly class SessionFacts
     }
 
     /**
-     * How to recover a truncated fact's full value: re-invoke the RECORDED operation with the same
-     * arguments — identified here by name and canonical digest. `sameCallRecorded` says the stream
-     * holds exactly this call; whether re-invoking is safe is the CALLER's decision, which is why
-     * the hint names the operation instead of promising it is read-only. What it rules out is the
-     * measured spiral: concluding the data is permanently lost because only the cut cache is visible.
+     * Distinguish the recorded result from a new invocation. Only an explicitly recorded read may
+     * carry a refetch hint, and even that produces a new value rather than the historical result.
+     * Mutations and unknown effects point back to the enclosing call's session/sequence without
+     * suggesting its producer as a reader. Existing result counts still disclose partial storage.
+     * Neither hint evaluates today's tool offer or the caller's authority.
      *
      * @param array<string, mixed> $payload
      *
-     * @return array{operation: string, argumentsDigest: string, sameCallRecorded: bool}
+     * @return array<string, array<string, mixed>>
      */
-    private function refetchRecovery(array $payload): array
+    private function resultRecovery(array $payload): array
     {
-        return [
+        $digest = 'sha256:' . hash('sha256', $this->canonicalJson($payload['arguments'] ?? null));
+        if (($payload['mutating'] ?? null) !== false) {
+            return ['recovery' => [
+                'source' => 'recorded_call',
+                'argumentsDigest' => $digest,
+                'producer' => ($payload['mutating'] ?? null) === true ? 'mutating' : 'unknown',
+            ]];
+        }
+
+        return ['refetch' => [
             'operation' => \is_string($payload['tool'] ?? null) ? $payload['tool'] : '?',
-            'argumentsDigest' => 'sha256:' . hash('sha256', $this->canonicalJson($payload['arguments'] ?? null)),
+            'argumentsDigest' => $digest,
             'sameCallRecorded' => true,
-        ];
+        ]];
     }
 
     /** The canonical JSON of a value — object keys sorted recursively — so equal arguments digest equal. */
@@ -809,11 +829,10 @@ final readonly class SessionFacts
             'coveredByCompaction' => $coveredByCompaction,
             'source' => ['event' => SessionEvent::ToolCalled->value, 'seq' => $event->seq],
         ];
-        // A truncated fact must say how to recover the full value. An agent that saw only the cut
-        // cache after compaction CONCLUDED the data was permanently lost and spiralled — the cap
-        // stays (it is what bounds the window); the recovery rides with it.
+        // Keep the bounded projection and its recovery distinction together. A historical write
+        // must not become a suggested read merely because its stored result was summarized.
         if ($result['truncated'] === true) {
-            $call['refetch'] = $this->refetchRecovery($payload);
+            $call += $this->resultRecovery($payload);
         }
 
         return $call;
@@ -938,10 +957,11 @@ final readonly class SessionFacts
                 'resultTruncated' => $result['truncated'],
             ],
         ];
-        // The same truncation honesty the compaction block carries: a bounded answer names the
-        // re-invocation that returns the full, current value instead of reading as a dead end.
+        // Narrow queries retain the same distinction as the compaction block, including when
+        // the stream itself retained only part of the result.
         if ($result['truncated'] === true) {
-            $answer['call']['refetch'] = $this->refetchRecovery($payload);
+            $answer['call'] += $this->resultRecovery($payload);
+            $answer['resultRecovery'] = self::RESULT_RECOVERY_POLICY;
         }
         if ($artifact !== null) {
             $answer['artifact'] = $artifact;
