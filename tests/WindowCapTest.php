@@ -71,28 +71,27 @@ final class WindowCapTest extends TestCase
         [$almacen] = $this->conUnaLlamada($json);
 
         $ventana = $almacen->load('s1')?->window() ?? [];
-        $deHerramienta = array_values(array_filter($ventana, static fn (array $m): bool => $m['role'] === 'tool'));
+        $deHerramienta = array_values(array_filter($ventana, static fn (array $m): bool => $m['role'] === 'assistant'));
 
         self::assertCount(1, $deHerramienta);
         self::assertLessThan(mb_strlen($json), mb_strlen($deHerramienta[0]['content']));
-        self::assertLessThanOrEqual(700, mb_strlen($deHerramienta[0]['content']), 'el tope sigue conteniendo el contexto');
+        $data = json_decode(explode("\n", $deHerramienta[0]['content'], 2)[1], true, flags: \JSON_THROW_ON_ERROR);
+        self::assertSame(mb_substr($json, 0, 600), $data['result']);
+        self::assertTrue($data['window_truncated']);
     }
 
-    /**
-     * THE CONTROL, and it points at the dangerous side.
-     *
-     * For a result that already fit, the window must be byte-identical to what it was. If it changed,
-     * this slice moved what the model sees — and containing the context was never what it came to
-     * touch.
-     */
-    public function testForAResultThatAlreadyFitTheWindowIsUnchanged(): void
+    /** A short result remains byte-identical inside the explicitly quoted historical data. */
+    public function testAShortResultIsPreservedInsideTheHistoryEnvelope(): void
     {
         [$almacen] = $this->conUnaLlamada('ok: dos plugins');
 
         $ventana = $almacen->load('s1')?->window() ?? [];
-        $deHerramienta = array_values(array_filter($ventana, static fn (array $m): bool => $m['role'] === 'tool'));
+        $deHerramienta = array_values(array_filter($ventana, static fn (array $m): bool => $m['role'] === 'assistant'));
 
-        self::assertSame('capabilities → ok: dos plugins', $deHerramienta[0]['content']);
+        $data = json_decode(explode("\n", $deHerramienta[0]['content'], 2)[1], true, flags: \JSON_THROW_ON_ERROR);
+        self::assertSame('capabilities', $data['tool']);
+        self::assertSame('ok: dos plugins', $data['result']);
+        self::assertFalse($data['window_truncated']);
     }
 
     /** Y el corte de la ventana no se anuncia como corte del resultado: son topes distintos. */

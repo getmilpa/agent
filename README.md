@@ -257,3 +257,15 @@ cannot contribute it. Producers remain responsible for stable identities and an 
 Observations containing diagnostic identities use `milpa.agent.effect-observation/v2`; observations
 without them retain the v1 wire shape. This reader accepts both; malformed or unknown versions
 remain unknown. Greenhouse decision0429/evidence0751 defines this distinction.
+
+### Resuming tool observations
+
+A resumed session projects recorded tool results as explicitly quoted runtime history
+in assistant messages, with the session ID and event sequence. The stream does not
+record the original provider call IDs, so these observations declare that correlation
+unavailable instead of emitting orphan `tool` messages or inventing assistant calls.
+Original events are unchanged. The result excerpt retains its 600-character limit;
+the complete JSON envelope counts toward the window budget. This is historical data,
+not a model-authored reply or new authority. JSON quoting does not establish immunity
+to prompt injection. Persisting and replaying complete provider exchanges is separate
+work (Greenhouse decision 0440, evidence 0828).
