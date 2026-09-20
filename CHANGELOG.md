@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.48.0](https://github.com/getmilpa/agent/compare/v0.47.0...v0.48.0) (2026-09-20)
+
+
+### Features
+
+* distinguish recorded results from producer reinvocation ([9771653](https://github.com/getmilpa/agent/commit/9771653522d43410700cd7c163d72f9f25f34bfe))
+
 ## [0.47.0](https://github.com/getmilpa/agent/compare/v0.46.0...v0.47.0) (2026-09-17)
 
 
