@@ -27,6 +27,9 @@ use PHPUnit\Framework\TestCase;
  * the same deterministic fixture. If any assertion here fails, the slice changed what an
  * unbudgeted session sends to the model — and containing the context of budgeted sessions was
  * never a licence to touch anyone else's window.
+ *
+ * The baseline includes the explicit result-recovery feedback contract; only its
+ * shared recovery policy was added to the original pre-budget fixture.
  */
 final class NullBudgetGoldenTest extends TestCase
 {

@@ -207,6 +207,14 @@ the package does not join them without a producer-declared link. Execution-effec
 therefore reported as unknown rather than inferred. Supplying a custom `Summarizer` replaces only the
 prose; it cannot remove this structured continuity block.
 
+Truncated results keep their recorded character counts and call identity. An explicitly read-only
+call may carry `refetch`, which describes a **new read**, not a replay of the historical result.
+For a mutation or an unknown effect, `recovery` points to the recorded call instead; re-invoking
+its producer is not result recovery. A shared `resultRecovery` policy appears once per facts block
+or narrow answer containing a truncated result. It explains both forms and reports tool admission
+as `not_evaluated`: a historical hint neither offers a tool nor grants permission. Narrow queries use the same
+distinction and do not reconstruct content that was already missing from storage.
+
 ## Autonomy modes
 
 `ask` pauses before anything that mutates. `acknowledge` announces and continues. `auto` runs to the

@@ -457,8 +457,8 @@ final class WorkStateTest extends TestCase
         self::assertTrue($result['call']['refetch']['sameCallRecorded']);
     }
 
-    /** Malformed arguments still digest deterministically: a foreign stream cannot break recovery. */
-    public function testMalformedArgumentsStillProduceADeterministicRefetchDigest(): void
+    /** Malformed arguments retain their digest without presenting a mutation as a reader. */
+    public function testMalformedArgumentsStillProduceADeterministicRecoveryDigest(): void
     {
         $events = new InMemoryEventStore();
         $store = new SessionStore($events);
@@ -479,9 +479,10 @@ final class WorkStateTest extends TestCase
         $facts = $store->facts('s1')->operationalFacts(\PHP_INT_MAX);
 
         self::assertTrue($facts['calls'][0]['resultTruncated']);
+        self::assertArrayNotHasKey('refetch', $facts['calls'][0]);
         self::assertSame(
             'sha256:' . hash('sha256', '"not-an-array"'),
-            $facts['calls'][0]['refetch']['argumentsDigest'],
+            $facts['calls'][0]['recovery']['argumentsDigest'],
         );
     }
 
