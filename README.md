@@ -269,3 +269,9 @@ the complete JSON envelope counts toward the window budget. This is historical d
 not a model-authored reply or new authority. JSON quoting does not establish immunity
 to prompt injection. Persisting and replaying complete provider exchanges is separate
 work (Greenhouse decision 0440, evidence 0828).
+
+### Observed generation mode
+
+`ModelCallIntake::thinking` and the optional `thinking` event field preserve the
+provider request object as observed. Missing or non-object declarations stay absent;
+no provider default is inferred. See Greenhouse evidence 0831.
