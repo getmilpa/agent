@@ -275,3 +275,5 @@ work (Greenhouse decision 0440, evidence 0828).
 `ModelCallIntake::thinking` and the optional `thinking` event field preserve the
 provider request object as observed. Missing or non-object declarations stay absent;
 no provider default is inferred. See Greenhouse evidence 0831.
+
+Ordering prerequisites complete only after a successful dispatch and an affirmative `ok` when the operation declares one. Failed results, pending confirmation and known incomplete results remain pending across session reloads. Legacy complete results without an `ok` declaration retain their dispatch outcome; this does not judge the quality of a plan or guide (Greenhouse 0833–0834).
