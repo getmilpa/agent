@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.49.0](https://github.com/getmilpa/agent/compare/v0.48.0...v0.49.0) (2026-09-21)
+
+
+### Features
+
+* preserve resident history and prerequisite outcomes ([749488e](https://github.com/getmilpa/agent/commit/749488e40efa5682462352eb08cff47549be7a2a))
+
 ## [0.48.0](https://github.com/getmilpa/agent/compare/v0.47.0...v0.48.0) (2026-09-20)
 
 
