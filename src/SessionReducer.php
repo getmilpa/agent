@@ -134,7 +134,9 @@ final readonly class SessionReducer
                     // and twenty pending for six. «Plan before starting» meant once, not once per
                     // turn — and a board painted on the second reading is noisy where the empty one
                     // was mute. Neither is a source.
-                    $primero = $this->sinCumplir($primero, \is_string($p['tool'] ?? null) ? $p['tool'] : ''),
+                    $primero = PrerequisiteCompletion::of($p)
+                        ? $this->sinCumplir($primero, \is_string($p['tool'] ?? null) ? $p['tool'] : '')
+                        : $primero,
                     // CUÁNTAS HERRAMIENTAS CORRIERON YA. Es lo que permite que el sistema sepa, sin
                     // preguntarle al agente, si una tarjeta nació antes o después del trabajo.
                     ++$herramientas,
