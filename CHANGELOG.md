@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.49.1](https://github.com/getmilpa/agent/compare/v0.49.0...v0.49.1) (2026-09-23)
+
+
+### Bug Fixes
+
+* **manifest:** the capability names a command that runs ([#107](https://github.com/getmilpa/agent/issues/107)) ([5751a4c](https://github.com/getmilpa/agent/commit/5751a4ca19670707f0dcf1434028c0b4b579cc0c))
+
 ## [0.49.0](https://github.com/getmilpa/agent/compare/v0.48.0...v0.49.0) (2026-09-21)
 
 
