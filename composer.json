@@ -53,7 +53,7 @@
           "agent:timeline",
           "agent:answer",
           "agent:mode",
-          "coa chat"
+          "php bin/coa chat"
         ],
         "provides": [
           "agent.sessions"
