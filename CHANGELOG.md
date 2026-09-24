@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.50.1](https://github.com/getmilpa/agent/compare/v0.50.0...v0.50.1) (2026-09-24)
+
+
+### Bug Fixes
+
+* **session:** an answer to a consent question says that nothing has run yet ([#111](https://github.com/getmilpa/agent/issues/111)) ([7705d43](https://github.com/getmilpa/agent/commit/7705d43ada0c9d58d22012531f759ef89c895738))
+
 ## [0.50.0](https://github.com/getmilpa/agent/compare/v0.49.1...v0.50.0) (2026-09-24)
 
 
