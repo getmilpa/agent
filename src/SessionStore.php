@@ -833,6 +833,21 @@ final readonly class SessionStore
     }
 
     /**
+     * How one run of the agent ended, as a typed fact of the session (greenhouse decisions/0466).
+     *
+     * @param array<string, mixed> $termination at least a non-empty `reason` (final_answer, tool_refused,
+     *                                          interrupted, …) and the producer's `receipt`, if any
+     */
+    public function recordRunTermination(string $id, array $termination): void
+    {
+        if (!\is_string($termination['reason'] ?? null) || $termination['reason'] === '') {
+            throw new \InvalidArgumentException('a run termination names its reason; without it it is not a fact');
+        }
+
+        $this->append($id, SessionEvent::RunTerminated, $termination);
+    }
+
+    /**
      * Graba que una operación corrió en un TRIAL WORKSPACE, con su reporte (greenhouse decisions/0069).
      *
      * El hecho nombra el workspace, la llamada exacta (digest), las cotas que el runner IMPUSO, el

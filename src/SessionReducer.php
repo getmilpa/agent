@@ -215,12 +215,15 @@ final readonly class SessionReducer
                         'reason' => $pregunta instanceof PendingQuestion ? $pregunta->reason : null,
                         'why' => $pregunta instanceof PendingQuestion ? $pregunta->why : null,
                     ],
-                    $pregunta = null,
                     $turnos[] = [
                         'role' => 'user',
-                        'content' => \is_string($p['answer'] ?? null) ? $p['answer'] : '',
+                        'content' => self::answerWithItsObject(
+                            \is_string($p['answer'] ?? null) ? $p['answer'] : '',
+                            $pregunta instanceof PendingQuestion ? $pregunta : null,
+                        ),
                         'seq' => $evento->seq,
                     ],
+                    $pregunta = null,
                 ],
                 // Cerrar la ventana cierra la pregunta y DEJA CONSTANCIA, igual que contestar. La diferencia
                 // con una respuesta es que aquí nadie decidió: por eso entra en `decisiones` con la
@@ -320,6 +323,10 @@ final readonly class SessionReducer
                 // who audits, read from the stream; none changes what the session IS.
                 SessionEvent::TrialRunRecorded,
                 SessionEvent::EffectObserved, SessionEvent::TrialPromoted, SessionEvent::TrialDiscarded => null,
+                // HOW A RUN ENDED DOES NOT MOVE THE FOLD (decisions/0466): an interrupted session is
+                // still runnable, a refused one still has its pending question. The fact is for whoever
+                // reads why the last run stopped, and for the judge — never a state of its own.
+                SessionEvent::RunTerminated => null,
                 // A RECORDED COMPENSATION CHANGES NO SESSION STATE, and that is the decision, not an
                 // omission. It is a recipe left behind for whoever wants to undo the call it cites —
                 // running it is a NEW call with its own ceremony (greenhouse evidence/0556), so a
@@ -362,6 +369,32 @@ final readonly class SessionReducer
             ownershipAssertion: $ownership,
             evidence: $evidencias,
         );
+    }
+
+    /**
+     * An answer as the model reads it: the answer AND what it answers (greenhouse decisions/0466).
+     *
+     * Folded bare, a resumed session read `user: sí` next to `user: continue` and nothing said what the
+     * «sí» approved — measured: the resident sometimes promoted the trial it had been asked about and
+     * sometimes redid the work in a new one (evidence/1000). The pair is known right here and nowhere
+     * later, so the turn carries the question and, when the question names one, the operation and the
+     * arguments that were consented.
+     */
+    private static function answerWithItsObject(string $answer, ?PendingQuestion $question): string
+    {
+        if ($question === null || trim($question->question) === '') {
+            return $answer;
+        }
+        $what = '';
+        $why = \is_string($question->why) ? json_decode($question->why, true) : null;
+        if (\is_array($why) && \is_string($why['operation'] ?? null) && $why['operation'] !== '') {
+            $arguments = \is_array($why['arguments'] ?? null) && $why['arguments'] !== []
+                ? ' ' . json_encode($why['arguments'], \JSON_UNESCAPED_UNICODE | \JSON_UNESCAPED_SLASHES)
+                : '';
+            $what = ' [' . $why['operation'] . $arguments . ']';
+        }
+
+        return $answer . ' — answering: «' . $question->question . '»' . $what;
     }
 
     /**

@@ -199,7 +199,9 @@ final class SessionStoreTest extends TestCase
         self::assertNotNull($sigue);
         self::assertTrue($sigue->isRunnable());
         self::assertNull($sigue->question);
-        self::assertSame('sqlite', $sigue->turns[0]['content'], 'la respuesta es contexto, no metadato');
+        // La respuesta es contexto Y lleva su objeto (greenhouse decisions/0466): un «sqlite» suelto no
+        // dice a qué contesta.
+        self::assertSame('sqlite — answering: «¿sqlite o mysql?»', $sigue->turns[0]['content'], 'la respuesta es contexto, no metadato');
     }
 
     /**
@@ -1257,5 +1259,47 @@ final class SessionStoreTest extends TestCase
         $almacen->loadAll();
         self::assertSame(1, $contador->replayAll, 'loadAll lee el log exactamente una vez');
         self::assertSame(0, $contador->replay, 'loadAll no cae en el replay-por-sesión');
+    }
+
+    /**
+     * A «sí» carries what it consented (greenhouse decisions/0466). Folded bare, a resumed resident read
+     * `user: sí` with nothing saying what was approved, and sometimes redid the work in a new trial
+     * instead of promoting the one it had asked about (evidence/1000).
+     */
+    public function testAnAnswerToAPermissionNamesTheOperationAndTheArgumentsItConsented(): void
+    {
+        $almacen = $this->store();
+        $almacen->start('s1', 'x');
+        $almacen->ask('s1', new PendingQuestion(
+            'perm:sandbox:promote',
+            'El agente quiere correr «sandbox:promote». ¿Lo autorizas en esta sesión?',
+            ['sí', 'no'],
+            (string) json_encode(['operation' => 'sandbox:promote', 'arguments' => ['workspace' => 'w42']]),
+            reason: 'permission',
+        ));
+        $almacen->answer('s1', 'perm:sandbox:promote', 'sí');
+
+        $turn = $almacen->load('s1')?->turns[0]['content'] ?? '';
+        self::assertStringStartsWith('sí — answering: «El agente quiere correr «sandbox:promote»', $turn);
+        self::assertStringEndsWith('[sandbox:promote {"workspace":"w42"}]', $turn, 'the exact call that was consented');
+    }
+
+    /** How a run ended is a typed fact the store writes, and it does not move the fold (decisions/0466). */
+    public function testHowARunEndedIsATypedFactThatDoesNotMoveTheFold(): void
+    {
+        $almacen = $this->store();
+        $almacen->start('s1', 'x');
+        $almacen->recordRunTermination('s1', ['reason' => 'interrupted', 'receipt' => null]);
+
+        $facts = array_values(array_filter($almacen->stream('s1'), static fn ($e): bool => $e->type === SessionEvent::RunTerminated->value));
+        self::assertCount(1, $facts);
+        self::assertSame('interrupted', $facts[0]->payload['reason']);
+        $sesion = $almacen->load('s1');
+        self::assertTrue($sesion?->isRunnable(), 'an interrupted session is still runnable');
+        self::assertNull($sesion->endedBecause);
+        self::assertSame([], $sesion->turns, 'and nothing was put in anybody\'s mouth');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $almacen->recordRunTermination('s1', ['receipt' => null]);
     }
 }
