@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.50.0](https://github.com/getmilpa/agent/compare/v0.49.1...v0.50.0) (2026-09-24)
+
+
+### Features
+
+* **session:** a run's end is a typed fact, and an answer carries its object ([#109](https://github.com/getmilpa/agent/issues/109)) ([068d91b](https://github.com/getmilpa/agent/commit/068d91b4dde4830d81c3b11b0117a31c1da0f48f))
+
 ## [0.49.1](https://github.com/getmilpa/agent/compare/v0.49.0...v0.49.1) (2026-09-23)
 
 
