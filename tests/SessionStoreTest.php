@@ -201,7 +201,7 @@ final class SessionStoreTest extends TestCase
         self::assertNull($sigue->question);
         // La respuesta es contexto Y lleva su objeto (greenhouse decisions/0466): un «sqlite» suelto no
         // dice a qué contesta.
-        self::assertSame('sqlite — answering: «¿sqlite o mysql?»', $sigue->turns[0]['content'], 'la respuesta es contexto, no metadato');
+        self::assertSame('sqlite — answering: «¿sqlite o mysql?»', $sigue->turns[0]['content'], 'a choice is not consent: no call to make');
     }
 
     /**
@@ -1281,7 +1281,10 @@ final class SessionStoreTest extends TestCase
 
         $turn = $almacen->load('s1')?->turns[0]['content'] ?? '';
         self::assertStringStartsWith('sí — answering: «El agente quiere correr «sandbox:promote»', $turn);
-        self::assertStringEndsWith('[sandbox:promote {"workspace":"w42"}]', $turn, 'the exact call that was consented');
+        self::assertStringContainsString('[sandbox:promote {"workspace":"w42"}]', $turn, 'the exact call that was consented');
+        // Consent is not execution (evidence/1001): the resident read the bare consent as «the promotion
+        // went through» and observed a house that had nothing.
+        self::assertStringEndsWith('This is consent only: nothing has run yet. If it allows the call, make the call to run it.', $turn);
     }
 
     /** How a run ended is a typed fact the store writes, and it does not move the fold (decisions/0466). */

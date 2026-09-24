@@ -31,6 +31,9 @@ use Milpa\EventStore\Event;
  */
 final readonly class SessionReducer
 {
+    /** The question reasons whose answer AUTHORIZES a call instead of choosing between values. */
+    private const CONSENT_REASONS = ['permission', 'target_not_named', 'signature'];
+
     /**
      * Reproduce el stream de una sesión y devuelve la sesión que resulta.
      *
@@ -394,7 +397,17 @@ final readonly class SessionReducer
             $what = ' [' . $why['operation'] . $arguments . ']';
         }
 
-        return $answer . ' — answering: «' . $question->question . '»' . $what;
+        $turn = $answer . ' — answering: «' . $question->question . '»' . $what;
+
+        // CONSENT IS NOT EXECUTION. Carrying the object was not enough: a resident read
+        // «sí — answering … [sandbox:promote {…}]» and reasoned «the promotion went through», then
+        // observed a house that had nothing (greenhouse evidence/1001). An answer to a consent question
+        // authorizes a call; it runs nothing, and the turn says so.
+        if ($what !== '' && \in_array($question->reason, self::CONSENT_REASONS, true)) {
+            $turn .= '. This is consent only: nothing has run yet. If it allows the call, make the call to run it.';
+        }
+
+        return $turn;
     }
 
     /**
