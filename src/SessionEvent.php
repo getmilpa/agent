@@ -359,6 +359,17 @@ enum SessionEvent: string
     case EffectObserved = 'session.effect_observed';
 
     /**
+     * How one run of the agent ENDED — final answer, a gate refusal, an interruption, a context pause —
+     * as a typed fact of the session (greenhouse decisions/0466).
+     *
+     * A runtime outcome is not something the model said, so it never enters the assistant channel
+     * (decisions/0996); it lives here instead. The session store writes it because the store is the one
+     * writer that always reaches the session's log — a host that wires its own store without exposing
+     * the event log must not lose the record that a run was interrupted.
+     */
+    case RunTerminated = 'session.run_terminated';
+
+    /**
      * Effects observed in a trial workspace were INTRODUCED into the host — by `sandbox:promote`,
      * through the ordinary gate, consented by a human. The human did not authorise the trial after
      * the fact; they authorised these paths entering the house.

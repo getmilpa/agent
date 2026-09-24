@@ -334,6 +334,8 @@ final readonly class SessionProjector
             SessionEvent::EffectObserved,
             SessionEvent::TrialPromoted,
             SessionEvent::TrialDiscarded,
+            // How a run ended is read by the surfaces that paint a run's closing, not by this one.
+            SessionEvent::RunTerminated,
             // A paused/resumed sequence (H-PERSIST-1, greenhouse decisions/0076) is not painted by
             // THIS projector either — same decision as QuestionAsked's sibling facts above: this is
             // the live human transcript, and a sequence's own surface reads its cursor from the
