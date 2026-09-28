@@ -338,6 +338,40 @@ enum SessionEvent: string
     case OwnershipAsserted = 'session.ownership_asserted';
 
     /**
+     * The signature that OPENED a sequence, kept so the calls after it can cite it instead of
+     * paying the ceremony again (greenhouse decisions/0458, 0500).
+     *
+     * What travels is the receipt exactly as the terminal door verified it — the operation it was
+     * for, the signed payload, the signature, the key fingerprint and the signer's uid — and never
+     * a grade, for the reason {@see self::OwnershipAsserted} gives: a stored «verified» is a coin
+     * anyone can mint by editing a line. Whoever cites it re-verifies the signature, re-binds the
+     * signed arguments to THIS sequence and asks the house who the signer is TODAY.
+     *
+     * It is not ownership either, and that is why it is its own fact. An ownership assertion says
+     * who claimed the session; this says which signed call started the sequence a later call wants
+     * to continue — a later signature replaces it, and it dies with the sequence.
+     */
+    case SequenceAuthorized = 'session.sequence_authorized';
+
+    /**
+     * A call ran citing the sequence's receipt instead of a new signature.
+     *
+     * One per resumed call, so the stream says which legs ran under which signature: the cited
+     * receipt's id (`sha256:<digest of the signed payload>`, the same id the original call ran
+     * under) and the operation that cited it. It does not change the fold — the receipt stands
+     * until the sequence ends — it is the audit line that makes «signed once» checkable.
+     */
+    case AuthorizationCited = 'session.authorization_cited';
+
+    /**
+     * The sequence ended, and its receipt with it: the next call signs again.
+     *
+     * A receipt that outlived its sequence would be a standing key — the shape greenhouse
+     * decisions/0458 refused. Whoever knows the sequence finished says so here, with the reason.
+     */
+    case AuthorizationReleased = 'session.authorization_released';
+
+    /**
      * A composition LOWERED this call's ceiling, and the receipt says who lowered which axis
      * (greenhouse decisions/0059). Recorded only when a descent actually reduced something, so the
      * human who later asks why their agent did not have to ask them finds the answer in the stream,

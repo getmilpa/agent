@@ -792,6 +792,68 @@ final readonly class SessionStore
     }
 
     /**
+     * Keep the verified signature that opened a sequence, so the calls after it can cite it
+     * (greenhouse decisions/0458, 0500). Returns the seq it was recorded at.
+     *
+     * The shape is checked here, at the door, for the reason {@see assertOwnership()} checks its
+     * own: a receipt without its signed bytes can never re-verify, and the stream keeps whatever it
+     * is given forever. What is stored is data — the grade is produced by whoever cites it.
+     *
+     * @param array<string, mixed> $receipt non-empty string `payload`, `signature` and
+     *                                      `fingerprint`, plus `uid` (string or `null`)
+     *
+     * @throws \InvalidArgumentException when the operation is blank or the receipt lacks that shape
+     */
+    public function authorizeSequence(string $id, string $operation, array $receipt): int
+    {
+        if (trim($operation) === '') {
+            throw new \InvalidArgumentException('a sequence receipt names the operation it was signed for (greenhouse decisions/0500)');
+        }
+        foreach (['payload', 'signature', 'fingerprint'] as $field) {
+            if (!\is_string($receipt[$field] ?? null) || $receipt[$field] === '') {
+                throw new \InvalidArgumentException(sprintf(
+                    'a sequence receipt without its "%s" cannot be re-verified by whoever cites it: it must carry '
+                    . 'non-empty string "payload", "signature" and "fingerprint" (greenhouse decisions/0500)',
+                    $field,
+                ));
+            }
+        }
+        if (!\array_key_exists('uid', $receipt) || ($receipt['uid'] !== null && !\is_string($receipt['uid']))) {
+            throw new \InvalidArgumentException(
+                'a sequence receipt must declare its "uid" — a string, or null to say plainly none was declared',
+            );
+        }
+
+        return $this->append($id, SessionEvent::SequenceAuthorized, [
+            'operation' => $operation,
+            'receipt' => [
+                'payload' => $receipt['payload'],
+                'signature' => $receipt['signature'],
+                'fingerprint' => $receipt['fingerprint'],
+                'uid' => $receipt['uid'],
+            ],
+        ]);
+    }
+
+    /**
+     * Record that a call ran citing the sequence's receipt instead of a new signature.
+     *
+     * @param string $receiptId the id the original call ran under, `sha256:<digest of the signed payload>`
+     */
+    public function citeAuthorization(string $id, string $operation, string $receiptId): void
+    {
+        $this->append($id, SessionEvent::AuthorizationCited, ['operation' => $operation, 'receipt' => $receiptId]);
+    }
+
+    /**
+     * The sequence ended: its receipt stops standing and the next call signs again.
+     */
+    public function releaseAuthorization(string $id, string $because): void
+    {
+        $this->append($id, SessionEvent::AuthorizationReleased, ['because' => $because]);
+    }
+
+    /**
      * Record that a composition LOWERED this call's ceiling — the receipt of greenhouse
      * decisions/0059, so an Audit view can paint why authority was not required.
      *

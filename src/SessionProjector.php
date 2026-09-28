@@ -324,6 +324,11 @@ final readonly class SessionProjector
             // evidence/0254). Whoever needs it reads it from the fold, where its docblock says
             // what it is not.
             SessionEvent::OwnershipAsserted,
+            // The sequence receipt and its citations are audit material with the same caveat: a
+            // signature block on the live screen means nothing until someone re-verifies it.
+            SessionEvent::SequenceAuthorized,
+            SessionEvent::AuthorizationCited,
+            SessionEvent::AuthorizationReleased,
             // A composition receipt is for the AUDIT surface (greenhouse decisions/0059,
             // evidence/0240), not for the live agent transcript — this projector renders the
             // conversation, and the receipt is read from the stream by render-audit instead.
