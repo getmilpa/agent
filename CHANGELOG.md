@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.51.0](https://github.com/getmilpa/agent/compare/v0.50.1...v0.51.0) (2026-09-28)
+
+
+### Features
+
+* **session:** the session keeps the receipt of the signature that opened its sequence ([#113](https://github.com/getmilpa/agent/issues/113)) ([57e0500](https://github.com/getmilpa/agent/commit/57e0500b82e8a3c8f8f039628193a71be8aa1a98))
+
 ## [0.50.1](https://github.com/getmilpa/agent/compare/v0.50.0...v0.50.1) (2026-09-24)
 
 
