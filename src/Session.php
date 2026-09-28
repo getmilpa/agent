@@ -123,6 +123,16 @@ final readonly class Session
          */
         private ?array $ownershipAssertion = null,
         /**
+         * The receipt of the signature that opened the running sequence, or `null` when there is
+         * none standing (greenhouse decisions/0500).
+         *
+         * Private for the same reason as {@see $ownershipAssertion}: the one reading surface is
+         * {@see sequenceAuthorization()}, where the doctrine about what this data is NOT lives.
+         *
+         * @var array{operation: string, receipt: array<string, mixed>, seq: int}|null
+         */
+        private ?array $sequenceAuthorization = null,
+        /**
          * Los SOBRES de cada permiso: operación → lista de sobres, uno por grant (greenhouse
          * decisions/0067). `null` es un sí pelón (sin cota dentro del techo); un arreglo es el
          * `EffectProfile::toArray()` de un apretón. Va aparte de `$permissions` a propósito: esa lista
@@ -513,6 +523,23 @@ final readonly class Session
     public function ownershipAssertion(): ?array
     {
         return $this->ownershipAssertion;
+    }
+
+    /**
+     * The receipt the running sequence was opened under — the LAST one recorded — or `null` when
+     * none stands: never recorded, released when the sequence ended, or the session ended.
+     *
+     * DATA, NOT TRUST, exactly like {@see ownershipAssertion()}. The payload and signature come
+     * back as they were appended, and nothing here says they still hold. A consumer that runs a
+     * call on this receipt re-verifies the signature, checks that the signed arguments name THIS
+     * sequence, and asks the house who the signer is today (greenhouse decisions/0500) — skipping
+     * any of that trusts a line anyone with write access to the stream could have written.
+     *
+     * @return array{operation: string, receipt: array<string, mixed>, seq: int}|null
+     */
+    public function sequenceAuthorization(): ?array
+    {
+        return $this->sequenceAuthorization;
     }
 
     /**

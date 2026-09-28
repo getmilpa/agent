@@ -78,6 +78,8 @@ final readonly class SessionReducer
         $terminada = null;
         /** @var array<string, mixed>|null $ownership */
         $ownership = null;
+        /** @var array{operation: string, receipt: array<string, mixed>, seq: int}|null $autorizacion */
+        $autorizacion = null;
 
         foreach ($events as $evento) {
             $tipo = SessionEvent::tryFrom($evento->type);
@@ -270,6 +272,12 @@ final readonly class SessionReducer
                 // (greenhouse decisions/0056, evidence/0254). Earlier assertions stay in the
                 // stream; what this projection answers is who signed this session most recently.
                 SessionEvent::OwnershipAsserted => $ownership = $this->assertionFrom($p, $ownership),
+                // THE RECEIPT FOLDS AS DATA TOO, and the last one wins: a new signature opens the
+                // sequence again. Released, it is gone — the next call signs (decisions/0500).
+                SessionEvent::SequenceAuthorized => $autorizacion = $this->authorizationFrom($p, $evento->seq, $autorizacion),
+                SessionEvent::AuthorizationReleased => $autorizacion = null,
+                // A citation is the audit line of a leg, not a change of state: the receipt stands.
+                SessionEvent::AuthorizationCited => null,
                 SessionEvent::PermissionGranted => [$permisos, $sobres] = [$this->conPermiso($permisos, $p), $this->conSobre($sobres, $p)],
                 SessionEvent::PermissionRevoked => [$permisos, $sobres] = [$this->sinPermiso($permisos, $p), $this->sinSobre($sobres, $p)],
                 SessionEvent::ModeChanged => $mode = AutonomyMode::tryFrom(
@@ -370,6 +378,8 @@ final readonly class SessionReducer
             endedBecause: $terminada,
             startedBy: $startedBy,
             ownershipAssertion: $ownership,
+            // An ended session continues nothing, so it cites nothing either.
+            sequenceAuthorization: $terminada === null ? $autorizacion : null,
             evidence: $evidencias,
         );
     }
@@ -408,6 +418,26 @@ final readonly class SessionReducer
         }
 
         return $turn;
+    }
+
+    /**
+     * The sequence receipt an event carries, or the previous one when the event is malformed.
+     *
+     * @param array<string, mixed>                                                   $payload
+     * @param array{operation: string, receipt: array<string, mixed>, seq: int}|null $previous
+     *
+     * @return array{operation: string, receipt: array<string, mixed>, seq: int}|null
+     */
+    private function authorizationFrom(array $payload, int $seq, ?array $previous): ?array
+    {
+        $operation = $payload['operation'] ?? null;
+        $receipt = $payload['receipt'] ?? null;
+        if (!\is_string($operation) || $operation === '' || !\is_array($receipt)) {
+            return $previous;
+        }
+
+        /** @var array<string, mixed> $receipt */
+        return ['operation' => $operation, 'receipt' => $receipt, 'seq' => $seq];
     }
 
     /**
