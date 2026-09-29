@@ -188,10 +188,10 @@ final class CompactorTest extends TestCase
         self::assertStringContainsString('1. entidad', $resumen);
         self::assertStringContainsString('make ×2', $resumen, 'cuántas veces, no sólo cuáles');
         self::assertStringContainsString('test', $resumen);
-        self::assertStringContainsString('Autorizado en esta sesión: make', $resumen);
-        self::assertStringContainsString('Ya hecho: escribir la entidad', $resumen);
+        self::assertStringContainsString('Allowed in this session: make', $resumen);
+        self::assertStringContainsString('Already done: escribir la entidad', $resumen);
         self::assertStringContainsString('escribir el controller', $resumen);
-        self::assertStringContainsString('migrar los datos (bloqueado)', $resumen);
+        self::assertStringContainsString('migrar los datos (blocked)', $resumen);
         self::assertStringContainsString('¿autorizas make? → «sí»', $resumen, 'lo que decidió el humano');
     }
 
@@ -211,7 +211,7 @@ final class CompactorTest extends TestCase
         self::assertNotNull($sesion);
 
         self::assertStringContainsString(
-            'Pendiente: lo que falta',
+            'Still to do: lo que falta',
             (new FactualSummarizer())->summarize($sesion, \PHP_INT_MAX),
         );
     }

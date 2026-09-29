@@ -217,6 +217,20 @@ final readonly class SessionProjector
                     'text' => \is_string($p['content'] ?? null) ? $p['content'] : '',
                 ],
             ],
+            // THE LAST RING OF EVERY RUN (greenhouse decisions/0514). A run that ends without a final
+            // answer — a stall, the step cap, a truncation, a failure, a context pause — writes no
+            // assistant turn, and this fact was projected to nothing: a live surface heard the run's
+            // last tool call and then silence (evidence/1041, d3 and d5: no closing ring, the witness
+            // neither). Its own kind, so no surface that filters `activity` reads it as a turn; one
+            // that only needs to know «something happened» (the Desktop re-reads on every ring) now
+            // hears the end of every run, whatever ended it.
+            SessionEvent::RunTerminated => [
+                ...$base,
+                'kind' => 'run_ended',
+                'run' => [
+                    'reason' => \is_string($p['reason'] ?? null) ? $p['reason'] : '',
+                ],
+            ],
             // A MESSAGE IS ITS OWN KIND, not an activity turn.
             //
             // Folding it into `activity` would tell a surface «the model is thinking» when what
@@ -339,8 +353,6 @@ final readonly class SessionProjector
             SessionEvent::EffectObserved,
             SessionEvent::TrialPromoted,
             SessionEvent::TrialDiscarded,
-            // How a run ended is read by the surfaces that paint a run's closing, not by this one.
-            SessionEvent::RunTerminated,
             // A paused/resumed sequence (H-PERSIST-1, greenhouse decisions/0076) is not painted by
             // THIS projector either — same decision as QuestionAsked's sibling facts above: this is
             // the live human transcript, and a sequence's own surface reads its cursor from the

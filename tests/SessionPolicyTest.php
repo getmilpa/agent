@@ -179,7 +179,7 @@ final class SessionPolicyTest extends TestCase
     {
         $pregunta = (new SessionPolicy())->permissionQuestion('plugins_lock', []);
 
-        self::assertSame('sin argumentos', $pregunta->why);
+        self::assertSame('no arguments', $pregunta->why);
     }
 
     private function outboundRead(): EffectProfile

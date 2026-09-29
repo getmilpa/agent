@@ -189,12 +189,12 @@ final readonly class SessionPolicy
         ?\DateTimeImmutable $expiresAt = null,
     ): PendingQuestion {
         $detalle = $arguments === []
-            ? 'sin argumentos'
-            : (json_encode($arguments, \JSON_UNESCAPED_UNICODE | \JSON_UNESCAPED_SLASHES) ?: 'sin argumentos');
+            ? 'no arguments'
+            : (json_encode($arguments, \JSON_UNESCAPED_UNICODE | \JSON_UNESCAPED_SLASHES) ?: 'no arguments');
 
         return new PendingQuestion(
             id: 'perm:' . $operation,
-            question: "El agente quiere correr «{$operation}». ¿Lo autorizas en esta sesión?",
+            question: "The agent wants to run «{$operation}». Do you allow it in this session?",
             options: ['sí', 'no'],
             why: $detalle,
             // Sin plazo si nadie lo pone, y eso NO es un descuido: cuánto tiempo tiene un humano para
@@ -220,13 +220,13 @@ final readonly class SessionPolicy
     public function signatureQuestion(string $operation, array $arguments): PendingQuestion
     {
         $detalle = $arguments === []
-            ? 'sin argumentos'
-            : (json_encode($arguments, \JSON_UNESCAPED_UNICODE | \JSON_UNESCAPED_SLASHES) ?: 'sin argumentos');
+            ? 'no arguments'
+            : (json_encode($arguments, \JSON_UNESCAPED_UNICODE | \JSON_UNESCAPED_SLASHES) ?: 'no arguments');
 
         return new PendingQuestion(
             id: 'sign:' . $operation,
-            question: "«{$operation}» exige una firma que nombre esta llamada. Córrela tú con --sign y "
-                . 'retoma la sesión.',
+            question: "«{$operation}» demands a signature that names this call. Run it yourself with --sign and "
+                . 'resume the session.',
             options: [],
             why: $detalle,
             reason: 'signature',

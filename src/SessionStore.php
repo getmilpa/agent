@@ -688,7 +688,7 @@ final readonly class SessionStore
             'at' => $cuando,
         ]);
         $this->end($id, sprintf(
-            'se cerró el %s la ventana para contestar «%s», y nadie contestó',
+            'the window to answer «%2$s» closed at %1$s, and nobody answered',
             $cuando,
             $sesion->question->question,
         ));

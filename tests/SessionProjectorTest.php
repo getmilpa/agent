@@ -168,6 +168,32 @@ final class SessionProjectorTest extends TestCase
     }
 
     /**
+     * EVERY RUN'S END RINGS, whatever ended it (greenhouse decisions/0514). A run that stops without a
+     * final answer writes no assistant turn; before this, its termination projected to nothing and a
+     * live surface heard the last tool call and then silence (evidence/1041, d3 and d5).
+     */
+    public function testEveryRunEndProjectsItsOwnKindWithItsReason(): void
+    {
+        foreach (['final_answer', 'progress_stalled', 'output_truncated', 'failed', 'context_budget_exhausted', 'steps_exhausted'] as $reason) {
+            $eventos = new InMemoryEventStore();
+            $almacen = new SessionStore($eventos);
+            $almacen->start('s1', 'x');
+            $almacen->recordTurn('s1', 'user', 'build it');
+            $almacen->recordToolCall('s1', 'make', [], 'ok', true, true);
+            $almacen->recordRunTermination('s1', ['reason' => $reason, 'receipt' => null]);
+
+            $pintables = (new SessionProjector())->projectAll($eventos->replay('agent-session:s1'));
+            $ultimo = end($pintables);
+
+            self::assertIsArray($ultimo);
+            self::assertSame('run_ended', $ultimo['kind'], "a run ended by {$reason} rings last");
+            self::assertSame($reason, $ultimo['run']['reason']);
+            self::assertSame('s1', $ultimo['session']);
+            self::assertCount(0, array_filter($pintables, static fn (array $p): bool => $p['kind'] === 'activity' && $p['activity']['state'] === 'ready'), 'and it is not painted as an answer');
+        }
+    }
+
+    /**
      * Hablar y llamar herramientas SÍ proyectan: son la actividad.
      *
      * No mueven una tarjeta —el tablero no los pinta— pero son exactamente lo que una pantalla tiene
