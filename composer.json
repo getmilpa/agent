@@ -21,7 +21,7 @@
   ],
   "require": {
     "php": ">=8.3",
-    "milpa/event-store": ">=0.3 <1.0",
+    "milpa/event-store": ">=0.4 <1.0",
     "milpa/command": ">=0.25.1 <1.0"
   },
   "require-dev": {
