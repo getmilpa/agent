@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.52.0](https://github.com/getmilpa/agent/compare/v0.51.1...v0.52.0) (2026-09-29)
+
+
+### Features
+
+* **session:** read who opened a session without reading the session ([#117](https://github.com/getmilpa/agent/issues/117)) ([43673b1](https://github.com/getmilpa/agent/commit/43673b148f7f959ab0487826798f5885bc666857))
+
+
+### Bug Fixes
+
+* a permission question offers yes/no, the language it is asked in ([#118](https://github.com/getmilpa/agent/issues/118)) ([6d506bf](https://github.com/getmilpa/agent/commit/6d506bf29939399af4cc071eb3cd6acb142db738))
+
 ## [0.51.1](https://github.com/getmilpa/agent/compare/v0.51.0...v0.51.1) (2026-09-29)
 
 
