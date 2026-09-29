@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.51.1](https://github.com/getmilpa/agent/compare/v0.51.0...v0.51.1) (2026-09-29)
+
+
+### Bug Fixes
+
+* the house speaks English to its resident, and every run end rings the hub ([#115](https://github.com/getmilpa/agent/issues/115)) ([ed3a200](https://github.com/getmilpa/agent/commit/ed3a200df185df5a9f4e20bf58d74a51694f1bc1))
+
 ## [0.51.0](https://github.com/getmilpa/agent/compare/v0.50.1...v0.51.0) (2026-09-28)
 
 
