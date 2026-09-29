@@ -154,7 +154,7 @@ final class SessionPolicyTest extends TestCase
         $pregunta = (new SessionPolicy())->permissionQuestion('make', ['what' => 'entity', 'plugin' => 'Inventario']);
 
         self::assertSame('perm:make', $pregunta->id);
-        self::assertSame(['sí', 'no'], $pregunta->options);
+        self::assertSame(['yes', 'no'], $pregunta->options, 'the answers speak the question\'s language (decisions/0518)');
         self::assertStringContainsString('make', $pregunta->question);
         self::assertStringContainsString('Inventario', (string) $pregunta->why);
     }

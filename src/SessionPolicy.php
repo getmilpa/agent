@@ -195,7 +195,10 @@ final readonly class SessionPolicy
         return new PendingQuestion(
             id: 'perm:' . $operation,
             question: "The agent wants to run «{$operation}». Do you allow it in this session?",
-            options: ['sí', 'no'],
+            // THE WIRE SPEAKS THE QUESTION'S LANGUAGE (greenhouse decisions/0518): the question is English, so
+            // are the answers it offers. A surface posts the option it shows; a recorded «sí» from an older
+            // client still reads as consent downstream — the reader is generous, the producer is not.
+            options: ['yes', 'no'],
             why: $detalle,
             // Sin plazo si nadie lo pone, y eso NO es un descuido: cuánto tiempo tiene un humano para
             // contestar es una decisión de producto, no un default que este paquete pueda inventar.
