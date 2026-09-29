@@ -16,6 +16,7 @@ namespace Milpa\Agent;
 
 use Milpa\EventStore\Event;
 use Milpa\EventStore\EventStoreInterface;
+use Milpa\EventStore\FirstEventInterface;
 
 /**
  * Abre, continúa y reconstruye sesiones sobre un log append-only.
@@ -156,6 +157,31 @@ final readonly class SessionStore
     public function stream(string $id): array
     {
         return $this->events->replay(self::PREFIX . $id);
+    }
+
+    /**
+     * The event that opened the session (`session.started`: its goal, its mode, its parent and who opened
+     * it), or `null` when it was never opened — read without reading the session.
+     *
+     * Who opened a session is a fact of its birth and never moves, and the checks that decide who may act
+     * on it need only that. Asked through {@see stream()}, they built the whole session to read one row: a
+     * session of 293 MB died inside that check, before the leg could record that it died (greenhouse
+     * evidence/1045 §3). A store that can read one event ({@see FirstEventInterface}) reads only as far as
+     * it; any other answers the same event from the stream.
+     */
+    public function opening(string $id): ?Event
+    {
+        $stream = self::PREFIX . $id;
+        if ($this->events instanceof FirstEventInterface) {
+            return $this->events->first($stream, SessionEvent::Started->value);
+        }
+        foreach ($this->events->replay($stream) as $event) {
+            if ($event->type === SessionEvent::Started->value) {
+                return $event;
+            }
+        }
+
+        return null;
     }
 
     /**
