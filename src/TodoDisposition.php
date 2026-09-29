@@ -70,11 +70,11 @@ enum TodoDisposition: string
     public function label(): string
     {
         return match ($this) {
-            self::Open => 'quedó abierta',
-            self::Transferred => 'pasó a otra sesión',
-            self::Blocked => 'esperando algo',
-            self::Deferred => 'pospuesta',
-            self::Abandoned => 'abandonada',
+            self::Open => 'left open',
+            self::Transferred => 'moved to another session',
+            self::Blocked => 'waiting on something',
+            self::Deferred => 'postponed',
+            self::Abandoned => 'abandoned',
         };
     }
 }

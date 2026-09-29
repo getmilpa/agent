@@ -307,7 +307,7 @@ final readonly class Session
 
         $window = [];
         if ($this->summary !== null && $this->summary !== '') {
-            $content = "Resumen de lo que ya pasó en esta sesión:\n" . $this->summary;
+            $content = "Summary of what already happened in this session:\n" . $this->summary;
             if ($budget !== null) {
                 $content = self::boundedSummaryContent($content, $budget);
             }
@@ -478,11 +478,11 @@ final readonly class Session
 
         $lineas = [];
         if ($this->plan !== null && trim($this->plan) !== '') {
-            $lineas[] = 'Plan de esta sesión: ' . trim($this->plan);
+            $lineas[] = 'Plan of this session: ' . trim($this->plan);
         }
 
         if ($this->todos !== []) {
-            $lineas[] = 'Pendientes:';
+            $lineas[] = 'Tasks:';
             $cerradas = 0;
             foreach ($this->todos as $todo) {
                 if ($collapseDone && $todo->status === TodoStatus::Done) {
@@ -499,7 +499,7 @@ final readonly class Session
                 $lineas[] = "  {$marca} {$todo->id}: {$todo->text}";
             }
             if ($cerradas > 0) {
-                $lineas[] = "  [x] {$cerradas} tareas cerradas";
+                $lineas[] = "  [x] {$cerradas} tasks closed";
             }
         }
 

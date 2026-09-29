@@ -414,7 +414,7 @@ final class SessionStoreTest extends TestCase
         $sesion = $almacen->load('s1');
         self::assertTrue($vencio);
         self::assertNull($sesion?->question, 'la pregunta se cierra');
-        self::assertStringContainsString('ventana para contestar', (string) $sesion?->endedBecause);
+        self::assertStringContainsString('window to answer', (string) $sesion?->endedBecause);
         self::assertStringContainsString('¿Lo autorizas?', (string) $sesion?->endedBecause);
         self::assertFalse($sesion?->isRunnable());
     }

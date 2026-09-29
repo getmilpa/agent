@@ -79,7 +79,7 @@ final readonly class FactualSummarizer implements Summarizer
     /** The single writer both {@see summarize()} and {@see boundedSummary()} ask. */
     private function compose(Session $session, int $throughSeq, bool $collapseDone): string
     {
-        $lineas = ["Objetivo de la sesión: {$session->goal}."];
+        $lineas = ['Session goal: ' . rtrim($session->goal, ". \t\n") . '.'];
 
         if ($session->plan !== null && trim($session->plan) !== '') {
             $lineas[] = 'Plan: ' . trim($session->plan);
@@ -91,11 +91,11 @@ final readonly class FactualSummarizer implements Summarizer
             foreach ($herramientas as $nombre => $veces) {
                 $partes[] = $veces > 1 ? "{$nombre} ×{$veces}" : $nombre;
             }
-            $lineas[] = 'Herramientas usadas: ' . implode(', ', $partes) . '.';
+            $lineas[] = 'Tools used: ' . implode(', ', $partes) . '.';
         }
 
         if ($session->permissions !== []) {
-            $lineas[] = 'Autorizado en esta sesión: ' . implode(', ', $session->permissions) . '.';
+            $lineas[] = 'Allowed in this session: ' . implode(', ', $session->permissions) . '.';
         }
 
         $hechos = [];
@@ -104,19 +104,19 @@ final readonly class FactualSummarizer implements Summarizer
             if ($todo->status === TodoStatus::Done) {
                 $hechos[] = $todo->text;
             } else {
-                $faltan[] = $todo->text . ($todo->status === TodoStatus::Blocked ? ' (bloqueado)' : '');
+                $faltan[] = $todo->text . ($todo->status === TodoStatus::Blocked ? ' (blocked)' : '');
             }
         }
         if ($hechos !== []) {
             $lineas[] = $collapseDone
-                ? 'Ya hecho: ' . \count($hechos) . ' tareas.'
-                : 'Ya hecho: ' . implode('; ', $hechos) . '.';
+                ? 'Already done: ' . \count($hechos) . ' tasks.'
+                : 'Already done: ' . implode('; ', $hechos) . '.';
         }
         if ($faltan !== []) {
             // Lo pendiente va SIEMPRE, aunque el resumen quede más largo: es lo único de este texto
             // que le dice al modelo qué hacer a continuación. Un resumen que cuenta lo que pasó y no
             // lo que falta deja a la sesión sin siguiente paso justo después de compactar.
-            $lineas[] = 'Pendiente: ' . implode('; ', $faltan) . '.';
+            $lineas[] = 'Still to do: ' . implode('; ', $faltan) . '.';
         }
 
         // Lo que el humano decidió cuando la sesión se detuvo a preguntar. Es lo más caro de perder
@@ -127,11 +127,11 @@ final readonly class FactualSummarizer implements Summarizer
             foreach ($session->decisions as $decision) {
                 $partes[] = $decision['question'] . ' → «' . $decision['answer'] . '»';
             }
-            $lineas[] = 'Decisiones del humano: ' . implode('; ', $partes);
+            $lineas[] = 'Decisions by the human: ' . implode('; ', $partes);
         }
 
         $lineas[] = sprintf(
-            '(Resumen automático de los primeros %d turnos; el registro completo sigue en la sesión %s.)',
+            '(Automatic summary of the first %d turns; the full record stays in session %s.)',
             $this->turnosHasta($session, $throughSeq),
             $session->id,
         );

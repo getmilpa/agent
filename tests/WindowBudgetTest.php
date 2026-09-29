@@ -346,7 +346,7 @@ final class WindowBudgetTest extends TestCase
         self::assertStringContainsString('the very next open step', $bounded);
         self::assertStringContainsString('the second open step', $bounded);
         self::assertStringNotContainsString('already done piece', $bounded);
-        self::assertStringContainsString('40 tareas cerradas', $bounded, 'the collapse is a named count, not an absence');
+        self::assertStringContainsString('40 tasks closed', $bounded, 'the collapse is a named count, not an absence');
     }
 
     /** Composition drops the OLDEST turns when they cannot fit — and says so in the window. */

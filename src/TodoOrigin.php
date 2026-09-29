@@ -91,10 +91,10 @@ enum TodoOrigin: string
     public function label(): string
     {
         return match ($this) {
-            self::Planned => 'planeada',
-            self::Discovered => 'encontrada sobre la marcha',
-            self::Retrospective => 'registrada después de hacerla',
-            self::Unsupported => 'declarada hecha sin respaldo',
+            self::Planned => 'planned',
+            self::Discovered => 'found along the way',
+            self::Retrospective => 'recorded after it was done',
+            self::Unsupported => 'declared done without support',
         };
     }
 }
