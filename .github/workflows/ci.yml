@@ -4,9 +4,14 @@ on:
   push:
     branches: [ main ]
   pull_request:
+    # `edited` too: the title of a pull request becomes its squashed commit and the body stays public
+    # beside it, so the message gate reads both again whenever they change. No `concurrency` here:
+    # branch protection takes the run of the latest event, and cancelling one can leave it blocked.
+    types: [ opened, synchronize, reopened, edited ]
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
   test:
@@ -25,6 +30,11 @@ jobs:
         with:
           php-version: ${{ matrix.php }}
           coverage: xdebug
+
+      # The family's one copy of this gate lives in getmilpa/devtools. It reads this pull request's
+      # title, body and commits (or the commits a push added) and needs nothing from the checkout.
+      - name: Message gate (a commit speaks for its author alone)
+        uses: getmilpa/devtools/.github/actions/message-gate@main
 
       - name: Validate composer.json
         run: composer validate --strict
