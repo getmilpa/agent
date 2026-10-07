@@ -106,4 +106,103 @@ final class ExecutionRecordedTest extends TestCase
 
         self::assertFalse($this->lastExecutionPayload($events)['executed_by']['verified']);
     }
+
+    /**
+     * WHERE IT RAN, AND WHAT IT LEFT (greenhouse decisions/0588).
+     *
+     * «It executed» was true of a rehearsal in a disposable copy and of an act in the house alike, and the fact
+     * could not tell them apart. An execution in the house says so, and carries the house's own account of the
+     * state it touched: each path, and its digest before and after.
+     */
+    public function testAnExecutionInTheHouseSaysWhatItLeft(): void
+    {
+        $events = new InMemoryEventStore();
+        $store = new SessionStore($events);
+        $store->start('s1', 'lend the drill');
+        $state = [['path' => 'var/herramientas.json', 'before' => 'sha256:aaa', 'after' => 'sha256:bbb']];
+
+        $store->recordExecution('s1', 'herramientas.prestar', null, 'agent', null, 'sha256:abc', [
+            'environment' => 'house', 'confined' => true, 'state' => $state, 'changed' => true, 'pre_image' => 'k0123',
+        ]);
+
+        $payload = $this->lastExecutionPayload($events);
+        self::assertSame('house', $payload['environment']);
+        self::assertTrue($payload['confined']);
+        self::assertSame($state, $payload['state']);
+        self::assertTrue($payload['changed']);
+        self::assertSame('k0123', $payload['pre_image']);
+        self::assertSame('herramientas.prestar', $payload['operation'], 'beside what the fact already said');
+        self::assertSame('sha256:abc', $payload['arguments_digest']);
+    }
+
+    /** The same digest before and after is «it did not change» — and a path that was not there is null, not a digest. */
+    public function testEqualDigestsAreAnExecutionThatLeftTheHouseAsItWas(): void
+    {
+        $events = new InMemoryEventStore();
+        $store = new SessionStore($events);
+        $store->start('s1', 'add a tool');
+
+        $store->recordExecution('s1', 'herramientas.agregar', null, 'agent', null, 'sha256:abc', [
+            'environment' => 'house', 'confined' => true, 'changed' => false, 'pre_image' => null,
+            'state' => [['path' => 'var/herramientas.json', 'before' => null, 'after' => null]],
+        ]);
+
+        $payload = $this->lastExecutionPayload($events);
+        self::assertFalse($payload['changed']);
+        self::assertNull($payload['pre_image']);
+        self::assertSame([['path' => 'var/herramientas.json', 'before' => null, 'after' => null]], $payload['state']);
+    }
+
+    /** An execution nobody said anything about carries none of it: the fact is the one it was, key for key. */
+    public function testAnExecutionThatDoesNotSayWhereItRanIsTheFactItWas(): void
+    {
+        $events = new InMemoryEventStore();
+        $store = new SessionStore($events);
+        $store->start('s1', 'set a key');
+
+        $store->recordExecution('s1', 'config.set', null, 'agent', null, 'sha256:abc');
+
+        self::assertSame(['operation', 'executed_by', 'authorized_by', 'arguments_digest'], array_keys($this->lastExecutionPayload($events)));
+    }
+
+    /**
+     * A receipt is written by the house, and a malformed one is a defect of the house: it is refused, never kept
+     * half-read.
+     *
+     * @param array<string, mixed> $landed
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('malformed')]
+    public function testAMalformedAccountIsRefused(array $landed): void
+    {
+        $events = new InMemoryEventStore();
+        $store = new SessionStore($events);
+        $store->start('s1', 'add a tool');
+
+        try {
+            $store->recordExecution('s1', 'herramientas.agregar', null, 'agent', null, 'sha256:abc', $landed);
+            self::fail('a malformed account was kept');
+        } catch (\InvalidArgumentException) {
+            foreach ($events->replay('agent-session:s1') as $event) {
+                self::assertNotSame('session.operation_executed', $event->type, 'nothing was written');
+            }
+        }
+    }
+
+    /** @return iterable<string, array{0: array<string, mixed>}> */
+    public static function malformed(): iterable
+    {
+        $good = ['environment' => 'house', 'confined' => true, 'changed' => true, 'pre_image' => null, 'state' => [['path' => 'var/a.json', 'before' => 'sha256:a', 'after' => 'sha256:b']]];
+        yield 'no environment' => [array_diff_key($good, ['environment' => 1])];
+        yield 'an environment that is not a word' => [['environment' => ['house']] + $good];
+        yield 'an empty environment' => [['environment' => ''] + $good];
+        yield 'confined is not a yes or a no' => [['confined' => 'yes'] + $good];
+        yield 'changed is not a yes or a no' => [['changed' => 1] + $good];
+        yield 'no state' => [array_diff_key($good, ['state' => 1])];
+        yield 'a state that is not a list' => [['state' => ['path' => 'var/a.json']] + $good];
+        yield 'a path that is not a word' => [['state' => [['path' => 7, 'before' => null, 'after' => null]]] + $good];
+        yield 'a digest that is not a word' => [['state' => [['path' => 'var/a.json', 'before' => 7, 'after' => null]]] + $good];
+        yield 'a state entry without its after' => [['state' => [['path' => 'var/a.json', 'before' => null]]] + $good];
+        yield 'a pre-image that is not a word' => [['pre_image' => 7] + $good];
+        yield 'something nobody asked for' => [$good + ['note' => 'trust me']];
+    }
 }

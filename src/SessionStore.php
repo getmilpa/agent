@@ -375,6 +375,8 @@ final readonly class SessionStore
      *                                                                                          the authority that covered this call; `null` says plainly
      *                                                                                          that none did, which is a fact and not a silence
      * @param string                                                           $argumentsDigest a reference to the arguments, not a second copy of them
+     * @param array<string, mixed>|null                                        $landed          where it ran and what state it left, when the house saw it
+     *                                                                                          ({@see self::whereItRan()}); `null` leaves the fact as it was
      */
     public function recordExecution(
         string $id,
@@ -383,8 +385,9 @@ final readonly class SessionStore
         string $executorSource,
         ?array $authorizedBy,
         string $argumentsDigest,
+        ?array $landed = null,
     ): void {
-        $this->append($id, SessionEvent::OperationExecuted, [
+        $this->append($id, SessionEvent::OperationExecuted, self::whereItRan($landed) + [
             'operation' => $operation,
             // AN OBSERVATION THAT SAYS IT IS ONE. `principal` may be null; `source` and `verified`
             // never are, because a name without its provenance is the false evidence this program
@@ -397,6 +400,56 @@ final readonly class SessionStore
             'authorized_by' => $authorizedBy,
             'arguments_digest' => $argumentsDigest,
         ]);
+    }
+
+    /**
+     * Where an execution ran and what it left, as the fact carries it — nothing when nobody said.
+     *
+     * WHERE IT RAN IS PART OF THE FACT (greenhouse decisions/0588). «It executed» was true of a rehearsal in a
+     * disposable copy and of an act in the house alike. An execution in the house says so, with the house's own
+     * account of the state it touched: each path and its digest before and after — `null` for a path that was not
+     * there. Equal digests are «it did not change», whatever the operation answered.
+     *
+     * The account is written by the house, so a malformed one is a defect, not an input: it is refused whole.
+     *
+     * @param array<string, mixed>|null $landed
+     *
+     * @return array{}|array{environment: string, confined: bool, state: list<array{path: string, before: ?string, after: ?string}>, changed: bool, pre_image: ?string}
+     *
+     * @throws \InvalidArgumentException when the account is not exactly the five facts of a receipt
+     */
+    private static function whereItRan(?array $landed): array
+    {
+        if ($landed === null) {
+            return [];
+        }
+        $state = $landed['state'] ?? null;
+        $facts = ['environment' => 1, 'confined' => 1, 'state' => 1, 'changed' => 1, 'pre_image' => 1];
+        $wellFormed = array_diff_key($landed, $facts) === [] && array_diff_key($facts, $landed) === []
+            && \is_string($landed['environment']) && $landed['environment'] !== ''
+            && \is_bool($landed['confined']) && \is_bool($landed['changed'])
+            && ($landed['pre_image'] === null || \is_string($landed['pre_image']))
+            && \is_array($state) && array_is_list($state);
+        foreach ($wellFormed ? $state : [] as $entry) {
+            $wellFormed = $wellFormed && \is_array($entry) && array_keys($entry) === ['path', 'before', 'after']
+                && \is_string($entry['path'])
+                && ($entry['before'] === null || \is_string($entry['before']))
+                && ($entry['after'] === null || \is_string($entry['after']));
+        }
+        if (! $wellFormed) {
+            throw new \InvalidArgumentException(
+                'An execution says where it ran with exactly: environment, confined, state (a list of path, before, after), changed and pre_image.'
+            );
+        }
+
+        /** @var array{environment: string, confined: bool, state: list<array{path: string, before: ?string, after: ?string}>, changed: bool, pre_image: ?string} $landed */
+        return [
+            'environment' => $landed['environment'],
+            'confined' => $landed['confined'],
+            'state' => $landed['state'],
+            'changed' => $landed['changed'],
+            'pre_image' => $landed['pre_image'],
+        ];
     }
 
     /**
