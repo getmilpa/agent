@@ -57,17 +57,17 @@ final class ExecutionRecordedTest extends TestCase
         $store->recordExecution(
             's1',
             'config.set',
-            new Principal('cli:impostor@cm4070'),
+            new Principal('cli:impostor@workstation'),
             'terminal-environment',
-            ['principal' => 'cli:rod@cm4070', 'provenance' => 'session.question_answered', 'session' => 's1'],
+            ['principal' => 'cli:operator@workstation', 'provenance' => 'session.question_answered', 'session' => 's1'],
             'sha256:abc',
         );
 
         $payload = $this->lastExecutionPayload($events);
 
         self::assertSame('config.set', $payload['operation'], 'the canonical identity, not a surface spelling');
-        self::assertSame('cli:impostor@cm4070', $payload['executed_by']['principal']);
-        self::assertSame('cli:rod@cm4070', $payload['authorized_by']['principal']);
+        self::assertSame('cli:impostor@workstation', $payload['executed_by']['principal']);
+        self::assertSame('cli:operator@workstation', $payload['authorized_by']['principal']);
         self::assertSame('terminal-environment', $payload['executed_by']['source'], 'an observation says where it came from');
         self::assertFalse($payload['executed_by']['verified'], 'observing an actor never verifies them');
         self::assertSame('sha256:abc', $payload['arguments_digest'], 'the arguments are referenced, not copied');
@@ -102,7 +102,7 @@ final class ExecutionRecordedTest extends TestCase
         $store = new SessionStore($events);
         $store->start('s1', 'set a key');
 
-        $store->recordExecution('s1', 'config.set', Principal::fromTerminal('rod', 'cm4070'), 'terminal-environment', null, 'sha256:ghi');
+        $store->recordExecution('s1', 'config.set', Principal::fromTerminal('operator', 'workstation'), 'terminal-environment', null, 'sha256:ghi');
 
         self::assertFalse($this->lastExecutionPayload($events)['executed_by']['verified']);
     }
