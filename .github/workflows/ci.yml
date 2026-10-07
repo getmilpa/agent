@@ -4,18 +4,19 @@ on:
   push:
     branches: [ main ]
   pull_request:
-    # `edited` too: a pull request's title and body become its squashed commit, so the message gate
-    # reads them again whenever they change.
+    # `edited` too: the title of a pull request becomes its squashed commit and the body stays public
+    # beside it, so the message gate reads both again whenever they change.
     types: [ opened, synchronize, reopened, edited ]
 
 permissions:
   contents: read
   pull-requests: read
 
-# One run per pull request. A newer event (a push, an edit) replaces the run it makes stale, so an
-# older run can never finish after it and leave a verdict about a text that is no longer there.
+# One run per commit of a pull request. A newer event on the same commit (an edit of the title or
+# the body) replaces the run it makes stale. A run for another commit is left alone, so starting an
+# older one, by a re-run or an approval, can never cancel the run of the newest.
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.run_id }}
+  group: ci-${{ github.event.pull_request.number || github.run_id }}-${{ github.event.pull_request.head.sha || github.sha }}
   cancel-in-progress: true
 
 jobs:
