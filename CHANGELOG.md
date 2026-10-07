@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.53.0](https://github.com/getmilpa/agent/compare/v0.52.0...v0.53.0) (2026-10-07)
+
+
+### Features
+
+* the execution receipt can say where the operation ran and what state it left ([#121](https://github.com/getmilpa/agent/issues/121)) ([1631fa6](https://github.com/getmilpa/agent/commit/1631fa6db0a9096fb0b14a86013a7d368798e460))
+
 ## [0.52.0](https://github.com/getmilpa/agent/compare/v0.51.1...v0.52.0) (2026-09-29)
 
 
