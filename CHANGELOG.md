@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.53.1](https://github.com/getmilpa/agent/compare/v0.53.0...v0.53.1) (2026-10-08)
+
+
+### Bug Fixes
+
+* what Composer installs carries no tests, nor a machine's name with them ([#125](https://github.com/getmilpa/agent/issues/125)) ([3686263](https://github.com/getmilpa/agent/commit/3686263206ad943aeee375028cdbec574a082b12))
+
 ## [0.53.0](https://github.com/getmilpa/agent/compare/v0.52.0...v0.53.0) (2026-10-07)
 
 
