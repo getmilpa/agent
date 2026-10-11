@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.53.2](https://github.com/getmilpa/agent/compare/v0.53.1...v0.53.2) (2026-10-11)
+
+
+### Bug Fixes
+
+* the example of a terminal principal names nobody (greenhouse evidence/1192) ([#128](https://github.com/getmilpa/agent/issues/128)) ([83f0ea1](https://github.com/getmilpa/agent/commit/83f0ea1a2893bfd2df7eff15247e263e4295510c))
+
 ## [0.53.1](https://github.com/getmilpa/agent/compare/v0.53.0...v0.53.1) (2026-10-08)
 
 
