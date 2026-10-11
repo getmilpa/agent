@@ -41,7 +41,7 @@ final class SessionObservationTest extends TestCase
 
     private function intake(array $tools = ['plugins_list', 'config_set']): ModelCallIntake
     {
-        return ModelCallIntake::fromChannelPayload('https://llama.local/v1/chat/completions', [
+        return ModelCallIntake::fromChannelPayload('https://model.example/v1/chat/completions', [
             'model' => 'qwen3-coder:30b',
             'system' => 'eres un agente de milpa',
             'messages' => [['role' => 'user', 'content' => 'hola']],

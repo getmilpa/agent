@@ -27,7 +27,7 @@ final class ModelCallRecordedTest extends TestCase
     /** @param list<array{role: string, content: string, class: string}>|null $window */
     private function intake(?array $window = null): ModelCallIntake
     {
-        return ModelCallIntake::fromChannelPayload('https://llama.local/v1/chat/completions', [
+        return ModelCallIntake::fromChannelPayload('https://model.example/v1/chat/completions', [
             'model' => 'qwen3-coder:30b',
             'messages' => [['role' => 'system', 'content' => 'eres un agente'], ['role' => 'user', 'content' => 'hola']],
             'tools' => [['name' => 'plugins_list'], ['name' => 'config_set']],
