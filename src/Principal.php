@@ -48,7 +48,7 @@ namespace Milpa\Agent;
 final readonly class Principal
 {
     /**
-     * @param string $id       identificador opaco, con su origen adelante: `cli:rod@laptop`,
+     * @param string $id       identificador opaco, con su origen adelante: `cli:operator@example.com`,
      *                         `actor:member:42`. El prefijo importa porque dos canales pueden usar
      *                         el mismo nombre para personas distintas
      * @param bool   $verified si detrás de ese id hubo una credencial que alguien comprobó
