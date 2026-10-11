@@ -527,11 +527,11 @@ final class SessionStoreTest extends TestCase
         $almacen = $this->store();
         $almacen->start('s1', 'x');
         $almacen->ask('s1', new PendingQuestion('perm:make', '¿?'));
-        $almacen->answer('s1', 'perm:make', 'sí', Principal::fromTerminal('rod', 'laptop'));
+        $almacen->answer('s1', 'perm:make', 'sí', Principal::fromTerminal('operator', 'example.com'));
 
         $quien = $almacen->load('s1')?->decisions[0]['by'] ?? null;
 
-        self::assertSame('cli:rod@laptop', $quien?->id);
+        self::assertSame('cli:operator@example.com', $quien?->id);
         self::assertFalse($quien?->verified, 'una terminal no prueba nada');
     }
 
