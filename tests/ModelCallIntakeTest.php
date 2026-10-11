@@ -138,14 +138,14 @@ final class ModelCallIntakeTest extends TestCase
 
     public function testTheIntakeSerializesToTheEventPayload(): void
     {
-        $intake = ModelCallIntake::fromChannelPayload('https://llama.local/v1/chat/completions', [
+        $intake = ModelCallIntake::fromChannelPayload('https://model.example/v1/chat/completions', [
             'model' => 'qwen3-coder:30b',
             'messages' => [['role' => 'user', 'content' => 'hola']],
             'tools' => [['name' => 'plugins_list']],
         ]);
 
         self::assertSame([
-            'endpoint' => 'https://llama.local/v1/chat/completions',
+            'endpoint' => 'https://model.example/v1/chat/completions',
             'model' => 'qwen3-coder:30b',
             'tools' => ['plugins_list'],
             'toolsUnknown' => false,

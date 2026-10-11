@@ -298,7 +298,7 @@ final class ProgressReceiptTest extends TestCase
         $events->append(new Event(
             SessionStore::PREFIX . $session,
             'session.model_called',
-            ['model' => 'qwen3.8-27b', 'endpoint' => 'http://llama.local:11438'],
+            ['model' => 'qwen3.8-27b', 'endpoint' => 'http://model.example:11438'],
             $events->nextSeq(),
         ));
     }

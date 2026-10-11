@@ -36,7 +36,7 @@ final class SystemIsAFactTest extends TestCase
 
     private function intake(string $system, string $user = 'hola'): ModelCallIntake
     {
-        return ModelCallIntake::fromChannelPayload('https://llama.local/v1/chat/completions', [
+        return ModelCallIntake::fromChannelPayload('https://model.example/v1/chat/completions', [
             'model' => 'qwen3-coder:30b',
             'system' => $system,
             'messages' => [['role' => 'user', 'content' => $user]],
