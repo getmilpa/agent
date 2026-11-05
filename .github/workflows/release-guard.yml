@@ -20,6 +20,8 @@ on:
 permissions:
   contents: write
   issues: write
+  actions: read
+  checks: read
 
 jobs:
   verificar:
@@ -32,54 +34,92 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           set -uo pipefail
-          sha=$(gh api "repos/$REPO/commits/$TAG" -q .sha)
-          echo "tag $TAG → $sha"
+          # Actions runs this step under `bash -e`. Every call that can fail sits inside a condition, so a
+          # failed read is handled here instead of ending the step before anyone is told.
 
           # NO PODER VER NO ES ESTAR VERDE. A commit with no check runs at all is drafted too: a
           # release published from a tree nobody ever tested is exactly the case this exists for.
+          # The same holds for a read that fails or comes back incomplete: it counts as one more wait,
+          # and if the last read could not see everything when the wait runs out, the release is drafted.
           max_waits=60
           wait_seconds=10
           waits=0
+          sha=""
+          total=0 relevant=0 pending=0 green=0 not_green=0 running=0
+          seen=no
 
           while :; do
-            counts=$(gh api "repos/$REPO/commits/$sha/check-runs" -q '
-              def relevant:
-                select((.details_url // "") | contains("/actions/runs/\(env.GITHUB_RUN_ID)/") | not) |
-                select(.name | test("PHP|Boot proof|quality"));
-              [
-                .total_count,
-                ([.check_runs[] | relevant] | length),
-                ([.check_runs[] | relevant | select(.status != "completed")] | length),
-                ([.check_runs[] | relevant | select(.conclusion == "success")] | length),
-                ([.check_runs[] | relevant | select(.conclusion != "success")] | length)
-              ] | @tsv')
-            IFS=$'\t' read -r total relevant pending green not_green <<< "$counts"
+            seen=no
+            [ -n "$sha" ] || sha=$(gh api "repos/$REPO/commits/$TAG" -q .sha) || sha=""
 
-            if [ "$relevant" -gt 0 ] && [ "$pending" -eq 0 ]; then
+            # Relevant checks, and whether the page holds all of them. Checks from this run are excluded.
+            # Workflow runs on the same commit that have not finished: a job that runs after another one
+            # creates its check late, so nothing is judged while its workflow is still going. Runs started
+            # by a release are left out; they are guards like this one, not tests of the tree.
+            if [ -n "$sha" ] \
+              && counts=$(gh api "repos/$REPO/commits/$sha/check-runs?per_page=100" -q '
+                   def relevant:
+                     select((.details_url // "") | contains("/actions/runs/\(env.GITHUB_RUN_ID)/") | not) |
+                     select(.name | test("PHP|Boot proof|quality"));
+                   [
+                     .total_count,
+                     ([.check_runs[] | relevant] | length),
+                     ([.check_runs[] | relevant | select(.status != "completed")] | length),
+                     ([.check_runs[] | relevant | select(.conclusion == "success")] | length),
+                     ([.check_runs[] | relevant | select(.conclusion != "success")] | length),
+                     (if .total_count == (.check_runs | length) then "all" else "partial" end)
+                   ] | map(tostring) | join(" ")') \
+              && runs=$(gh api "repos/$REPO/actions/runs?head_sha=$sha&per_page=100" -q '
+                   [
+                     ([.workflow_runs[] | select(.event != "release") | select(.status != "completed")] | length),
+                     (if .total_count == (.workflow_runs | length) then "all" else "partial" end)
+                   ] | map(tostring) | join(" ")') \
+              && [[ "$counts" =~ ^[0-9]+\ [0-9]+\ [0-9]+\ [0-9]+\ [0-9]+\ all$ ]] \
+              && [[ "$runs" =~ ^[0-9]+\ all$ ]]; then
+              read -r total relevant pending green not_green _ <<< "$counts"
+              read -r running _ <<< "$runs"
+              seen=yes
+            fi
+
+            if [ "$seen" = yes ] && [ "$relevant" -gt 0 ] && [ "$pending" -eq 0 ] && [ "$running" -eq 0 ]; then
               break
             fi
 
             if [ "$waits" -ge "$max_waits" ]; then
-              echo "::warning::Timed out after $((max_waits * wait_seconds)) seconds waiting for $pending relevant check(s)"
+              if [ "$seen" = yes ]; then
+                echo "::warning::Timed out after $((max_waits * wait_seconds)) seconds: $pending relevant check(s) and $running workflow run(s) still going"
+              else
+                echo "::warning::Timed out after $((max_waits * wait_seconds)) seconds without one complete read of the checks"
+              fi
               break
             fi
 
             waits=$((waits + 1))
-            echo "Waiting for relevant checks to appear or complete ($relevant found, $pending pending; $waits/$max_waits)"
+            if [ "$seen" = yes ]; then
+              echo "Waiting ($relevant relevant found, $pending pending, $running workflow run(s) going; $waits/$max_waits)"
+            else
+              echo "Waiting: could not read the checks completely ($waits/$max_waits)"
+            fi
             sleep "$wait_seconds"
           done
 
+          echo "tag $TAG → ${sha:-?}"
           echo "checks: $total · relevantes verdes: $green · relevantes no verdes: $not_green"
 
-          if [ "$green" -gt 0 ] && [ "$not_green" -eq 0 ]; then
+          if [ "$seen" = yes ] && [ "$green" -gt 0 ] && [ "$not_green" -eq 0 ]; then
             echo "VERDE — el release se queda publicado."
             exit 0
           fi
 
-          echo "::error::$TAG apunta a un commit que no pasó ($green verdes, $not_green no verdes de $total checks)"
+          if [ "$seen" = yes ]; then
+            motivo="con $green check(s) relevantes en verde y $not_green sin pasar, de $total"
+          else
+            motivo="sin una lectura completa de sus checks en $((max_waits * wait_seconds)) segundos"
+          fi
+          echo "::error::$TAG apunta a un commit que no pasó: $motivo"
           gh release edit "$TAG" --repo "$REPO" --draft
           cuerpo=$(printf '%s\n' \
-            "\`$TAG\` apunta a \`$sha\`, con $green check(s) relevantes en verde y $not_green sin pasar, de $total." \
+            "\`$TAG\` apunta a \`${sha:-?}\`, $motivo." \
             "" \
             "Se pasó a **borrador** en vez de borrarlo: sale de la lista pública y de Packagist, y se deshace con un clic si esto es un falso positivo." \
             "" \
