@@ -87,8 +87,9 @@ jobs:
               break
             fi
 
-            # Red is red. Once no relevant check is pending and one of them did not pass, the verdict is
-            # already a draft; waiting for other runs would only keep a red release public longer.
+            # Red is red. Once no relevant check is pending and one of them did not pass, the release is
+            # drafted without waiting for other runs. A re-run could still turn that check green; the
+            # draft can then be undone with one click, and publishing again runs this guard again.
             if [ "$seen" = yes ] && [ "$pending" -eq 0 ] && [ "$not_green" -gt 0 ]; then
               break
             fi
