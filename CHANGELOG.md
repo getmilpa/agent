@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.53.3](https://github.com/getmilpa/agent/compare/v0.53.2...v0.53.3) (2026-11-19)
+
+
+### Bug Fixes
+
+* preserve emitted debt signals in work snapshots ([c7fb358](https://github.com/getmilpa/agent/commit/c7fb358e8fd1774587c48ac96e455dee950c110a))
+* preserve emitted debt signals in work snapshots ([eb6cb56](https://github.com/getmilpa/agent/commit/eb6cb56f2d3c5112574f1875de4f1b4d12651250))
+
 ## [0.53.2](https://github.com/getmilpa/agent/compare/v0.53.1...v0.53.2) (2026-10-11)
 
 
