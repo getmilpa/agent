@@ -22,6 +22,7 @@ use Milpa\Agent\TodoStatus;
 use Milpa\Agent\WorkSnapshot;
 use Milpa\EventStore\Event;
 use Milpa\EventStore\InMemoryEventStore;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -142,8 +143,9 @@ final class WorkSnapshotTest extends TestCase
         self::assertContains(['kind' => 'todo_blocked', 'detail' => 'wait on the DBA'], $snap->blocked);
     }
 
-    /** The house's own debt signals are surfaced, read by the fact's literal type (the DebtSignal doctrine). */
-    public function testHouseDebtIsSurfaced(): void
+    /** Both debt envelopes project their own strings without inventing or mixing evidence. */
+    #[DataProvider('debtEnvelopes')]
+    public function testHouseDebtIsSurfaced(array $payload, array $expected): void
     {
         $events = new InMemoryEventStore();
         $store = new SessionStore($events);
@@ -151,13 +153,70 @@ final class WorkSnapshotTest extends TestCase
         $events->append(new Event(
             SessionStore::PREFIX . 's1',
             'session.debt_signaled',
-            ['kind' => 'framework_gap', 'summary' => 'no operation exposes the migration status'],
+            $payload,
             $events->nextSeq(),
         ));
 
         $snap = $this->snapshot($events, 's1');
 
-        self::assertSame([['kind' => 'framework_gap', 'summary' => 'no operation exposes the migration status']], $snap->houseDebt);
+        self::assertSame([$expected], $snap->houseDebt);
+        self::assertSame($payload, $events->replay(SessionStore::PREFIX . 's1')[1]->payload, 'projection leaves the source event intact');
+    }
+
+    /**
+     * Published DebtSignal uses signal/context; older streams used kind/summary.
+     *
+     * @return iterable<string, array{array<string, mixed>, array{kind: string, summary: string}}>
+     */
+    public static function debtEnvelopes(): iterable
+    {
+        yield 'published producer envelope' => [
+            ['signal' => 'framework_gap', 'context' => ['summary' => 'no operation exposes the migration status']],
+            ['kind' => 'framework_gap', 'summary' => 'no operation exposes the migration status'],
+        ];
+        yield 'historical envelope' => [
+            ['kind' => 'scope_fragility', 'summary' => 'legacy observation'],
+            ['kind' => 'scope_fragility', 'summary' => 'legacy observation'],
+        ];
+        yield 'current envelope wins as a unit' => [
+            ['signal' => 'framework_gap', 'context' => ['summary' => 'current'], 'kind' => 'scope_fragility', 'summary' => 'legacy'],
+            ['kind' => 'framework_gap', 'summary' => 'current'],
+        ];
+        yield 'missing current summary never borrows historical summary' => [
+            ['signal' => 'framework_gap', 'summary' => 'legacy'],
+            ['kind' => 'framework_gap', 'summary' => ''],
+        ];
+        yield 'null signal does not select historical envelope' => [
+            ['signal' => null, 'context' => ['summary' => 'current'], 'kind' => 'scope_fragility', 'summary' => 'legacy'],
+            ['kind' => 'unknown', 'summary' => 'current'],
+        ];
+        yield 'historical envelope never borrows current summary' => [
+            ['kind' => 'scope_fragility', 'context' => ['summary' => 'current']],
+            ['kind' => 'scope_fragility', 'summary' => ''],
+        ];
+        yield 'current empty strings remain empty' => [
+            ['signal' => '', 'context' => ['summary' => ''], 'kind' => 'legacy', 'summary' => 'legacy'],
+            ['kind' => '', 'summary' => ''],
+        ];
+        yield 'historical empty strings remain empty' => [
+            ['kind' => '', 'summary' => ''],
+            ['kind' => '', 'summary' => ''],
+        ];
+        yield 'empty payload' => [[], ['kind' => 'unknown', 'summary' => '']];
+        yield 'non-string current fields' => [
+            ['signal' => ['framework_gap'], 'context' => ['summary' => 42]],
+            ['kind' => 'unknown', 'summary' => ''],
+        ];
+        yield 'non-string historical fields' => [
+            ['kind' => false, 'summary' => ['legacy']],
+            ['kind' => 'unknown', 'summary' => ''],
+        ];
+        foreach ([null, '', 'text', 42, false, [], ['other' => 'not a summary']] as $index => $context) {
+            yield 'missing or malformed context ' . $index => [
+                ['signal' => 'framework_gap', 'context' => $context],
+                ['kind' => 'framework_gap', 'summary' => ''],
+            ];
+        }
     }
 
     /** An empty session is an honest empty snapshot, not an error. */
