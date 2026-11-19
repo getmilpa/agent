@@ -186,9 +186,15 @@ final readonly class WorkSnapshot
                 case 'session.debt_signaled':
                     // By its literal string, the DebtSignal doctrine: this VO lives in milpa/agent
                     // and the emitter in app-runtime, so the reader reads the fact, never the class.
+                    // Presence of signal selects the current envelope, even when malformed. Never
+                    // combine it with historical kind/summary fields from a different envelope.
+                    $currentDebt = \array_key_exists('signal', $p);
+                    $context = \is_array($p['context'] ?? null) ? $p['context'] : [];
+                    $kind = $currentDebt ? ($p['signal'] ?? null) : ($p['kind'] ?? null);
+                    $summary = $currentDebt ? ($context['summary'] ?? null) : ($p['summary'] ?? null);
                     $houseDebt[] = [
-                        'kind' => \is_string($p['kind'] ?? null) ? $p['kind'] : 'unknown',
-                        'summary' => \is_string($p['summary'] ?? null) ? $p['summary'] : '',
+                        'kind' => \is_string($kind) ? $kind : 'unknown',
+                        'summary' => \is_string($summary) ? $summary : '',
                     ];
                     break;
             }
