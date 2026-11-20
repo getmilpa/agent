@@ -17,6 +17,12 @@ name: Release guard
 on:
   release:
     types: [published]
+  workflow_call:
+    inputs:
+      tag_name:
+        description: The exact tag returned by the release publisher
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -31,7 +37,7 @@ jobs:
       - name: Is the tagged commit green?
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.event.release.tag_name }}
+          TAG: ${{ inputs.tag_name || github.event.release.tag_name }}
           REPO: ${{ github.repository }}
         run: |
           set -uo pipefail
@@ -56,8 +62,9 @@ jobs:
 
             # Relevant checks, and whether the page holds all of them. Checks from this run are excluded.
             # Workflow runs on the same commit that have not finished: a job that runs after another one
-            # creates its check late, so nothing is judged while its workflow is still going. Runs started
-            # by a release are left out; they are guards like this one, not tests of the tree.
+            # creates its check late, so nothing is judged while its workflow is still going. Preserve
+            # the existing release-event exemption: those runs are guards, not tests of the tree.
+            # Also exclude this exact run ID; a reusable call shares the publisher's push run ID.
             if [ -n "$sha" ] \
               && counts=$(gh api "repos/$REPO/commits/$sha/check-runs?per_page=100" -q '
                    def relevant:
@@ -73,7 +80,7 @@ jobs:
                    ] | map(tostring) | join(" ")') \
               && runs=$(gh api "repos/$REPO/actions/runs?head_sha=$sha&per_page=100" -q '
                    [
-                     ([.workflow_runs[] | select(.event != "release") | select(.status != "completed")] | length),
+                     ([.workflow_runs[] | select(.event != "release") | select(.id != (env.GITHUB_RUN_ID | tonumber)) | select(.status != "completed")] | length),
                      (if .total_count == (.workflow_runs | length) then "all" else "partial" end)
                    ] | map(tostring) | join(" ")') \
               && [[ "$counts" =~ ^[0-9]+\ [0-9]+\ [0-9]+\ [0-9]+\ [0-9]+\ all$ ]] \
