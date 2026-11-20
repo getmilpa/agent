@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.53.4](https://github.com/getmilpa/agent/compare/v0.53.3...v0.53.4) (2026-11-20)
+
+
+### Bug Fixes
+
+* retain observed tool-call provenance in model intake ([4ff485d](https://github.com/getmilpa/agent/commit/4ff485dcb304b614ffca315e5293d31356c4ba0d))
+* retain observed tool-call provenance in model intake ([777fee8](https://github.com/getmilpa/agent/commit/777fee8f26b441a07ae8580b3deb935078999fa6))
+
 ## [0.53.3](https://github.com/getmilpa/agent/compare/v0.53.2...v0.53.3) (2026-11-19)
 
 
