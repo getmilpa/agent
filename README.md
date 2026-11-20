@@ -65,6 +65,15 @@ deriving it from a prompt or criterion. When no object was observed, the field i
 existing event shape is unchanged. A format observation records a request; it does not establish
 that the provider complied or that the answer is correct.
 
+Each observed message also retains `tool_calls`, `tool_call_id` and `name` when those
+fields were present on the provider wire (Greenhouse evidence E1240/E1242). This
+preserves the producing assistant call and the tool reply's provider ID in
+`session.model_called`; the provider ID is distinct from a house receipt ID.
+Missing fields stay absent, and explicit null or malformed values stay observable.
+Consumers must validate their shape and ordering before treating them as provenance.
+This observation does not normalize provider content blocks, validate a report or
+introduce a public completion criterion.
+
 ## Why event-sourced
 
 Because what matters about a long session is both **where it ended up** and **how it got there**. A

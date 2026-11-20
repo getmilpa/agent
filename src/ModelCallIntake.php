@@ -38,27 +38,14 @@ final class ModelCallIntake
      * composition that Session declared before the gateway added prompts, tool exchanges, or
      * provider-specific rewrites. They are deliberately not joined by position or content.
      *
-     * @param list<string>                                                                         $tools          Los nombres ofrecidos, en su orden.
-     * @param bool                                                                                 $toolsUnknown   Viajaron herramientas y esta clase
-     *                                                                                                             no supo nombrarlas. NO es lo mismo que
-     *                                                                                                             no haber ofrecido ninguna.
-     * @param list<array{role: string, content: string}>                                           $messages       LO QUE VIAJÓ, no su tamaño. Los
-     *                                                                                                             turnos del stream son lo que la
-     *                                                                                                             sesión REGISTRÓ; esto es lo que
-     *                                                                                                             de verdad se mandó, y no siempre
-     *                                                                                                             coinciden — después de compactar,
-     *                                                                                                             la ventana lleva un resumen que
-     *                                                                                                             ningún turno contiene (greenhouse
-     *                                                                                                             decisions/0039).
-     * @param array<string, mixed>|null                                                            $omitted        Lo que alguien DECLARÓ haber
-     *                                                                                                             retenido. `null` es «nadie dijo»,
-     *                                                                                                             nunca «nada».
-     * @param list<array{role: string, content: string, class: value-of<WindowMessageClass>}>|null $window         The logical window declared by its
-     *                                                                                                             composer. It travels beside the
-     *                                                                                                             wire payload and never inside it.
-     * @param array<string,mixed>|null                                                             $responseFormat Explicit provider-wire output format, when observed.
-     * @param array<string,mixed>|null                                                             $outputBudget   Output-limit fields exactly as observed, not inferred defaults.
-     * @param array<string,mixed>|null                                                             $thinking       Explicit provider thinking object, without inferred defaults.
+     * @param list<string>                                                                                       $tools          Offered tool names in observed order.
+     * @param bool                                                                                               $toolsUnknown   Tools travelled, but their names could not be read.
+     * @param list<array{role: string, content: string, tool_calls?: mixed, tool_call_id?: mixed, name?: mixed}> $messages       Observed message content and optional raw call provenance (Greenhouse E1240/E1242).
+     * @param array<string, mixed>|null                                                                          $omitted        Declared omissions; null means none were declared.
+     * @param list<array{role: string, content: string, class: value-of<WindowMessageClass>}>|null               $window         Logical window declared by its composer, separate from the provider payload.
+     * @param array<string,mixed>|null                                                                           $responseFormat Explicit provider-wire output format, when observed.
+     * @param array<string,mixed>|null                                                                           $outputBudget   Output-limit fields exactly as observed, not inferred defaults.
+     * @param array<string,mixed>|null                                                                           $thinking       Explicit provider thinking object, without inferred defaults.
      */
     private function __construct(
         public readonly string $endpoint,
@@ -116,7 +103,15 @@ final class ModelCallIntake
             // Se midió antes de decidirlo: grabar el contenido cuesta +18 %, y referenciar el `system`
             // en vez de copiarlo ahorra 73 % del suyo. El stream queda 14 % MÁS CHICO que antes y
             // además auditable (`evidence/0222` y `0223`).
-            $mensajes[] = ['role' => $rol, 'content' => $contenido];
+            $message = ['role' => $rol, 'content' => $contenido];
+            // Keep provider call provenance exactly as observed, never inferred from content.
+            // Consumers must validate shape and ordering before using these optional fields.
+            foreach (['tool_calls', 'tool_call_id', 'name'] as $field) {
+                if (array_key_exists($field, $m)) {
+                    $message[$field] = $m[$field];
+                }
+            }
+            $mensajes[] = $message;
         }
 
         [$tools, $desconocidas] = self::leerTools($payload['tools'] ?? null);
